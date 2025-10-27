@@ -42,7 +42,7 @@ from dotenv import load_dotenv
 
 from src.search_service import ImageGenerationService
 from src.parser import ImageResponseParser
-from src.models import ImageOptions, ImageResult, ImageError
+from src.models import ImageOptions, ImageResult, ImageError, StoryOptions
 from src.logging_config import setup_logging, get_logger, LogContext
 
 
@@ -86,10 +86,14 @@ def parse_arguments() -> argparse.Namespace:
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Examples:
-  %(prog)s "A cat wearing a space helmet"                    # Auto-saves to ./generated_images/
+  %(prog)s "A cat wearing a space helmet"                    # Single image generation
   %(prog)s "Sunset over mountains" --model dall-e-2         # Use DALL-E 2 model
   %(prog)s "Abstract art" --save-path ./my_image.png        # Custom save location
   %(prog)s "A robot" --no-save                              # Don't save locally
+  
+Story Mode:
+  %(prog)s "A cat going to shop for watermelons" --story    # Generate 5-scene story
+  %(prog)s "Dragon adventure" --story --scenes 3            # Custom number of scenes
         """
     )
     
@@ -170,6 +174,21 @@ Examples:
         "--api-key",
         type=str,
         help="OpenAI API key (can also use OPENAI_API_KEY env var)"
+    )
+    
+    # Story generation mode
+    parser.add_argument(
+        "--story",
+        action="store_true",
+        help="Generate a visual story (5 sequential images) instead of a single image"
+    )
+    
+    # Number of scenes in story
+    parser.add_argument(
+        "--scenes",
+        type=int,
+        default=5,
+        help="Number of scenes to generate for story mode (default: 5)"
     )
     
     return parser.parse_args()
@@ -262,6 +281,38 @@ def validate_arguments(args: argparse.Namespace) -> None:
                 raise ValueError(f"Cannot create save directory '{save_dir}': {e}")
 
 
+def display_story_results(story_result, verbose: bool = False) -> None:
+    """
+    Display story generation results to the user.
+    
+    Args:
+        story_result: StoryResult object containing all scenes
+        verbose: Whether to show detailed information
+    """
+    print(f"\n🎭 STORY: {story_result.story_prompt}")
+    print("=" * 60)
+    
+    for scene in story_result.scenes:
+        print(f"\n📖 Scene {scene.scene_number}: {scene.narrative}")
+        
+        if scene.is_generated and scene.image_result:
+            print(f"✅ Generated: {scene.image_result.image_url}")
+            
+            if verbose and scene.image_result.metadata:
+                print(f"   Model: {scene.image_result.metadata.model}")
+                print(f"   Size: {scene.image_result.metadata.size}")
+                if scene.image_result.metadata.revised_prompt:
+                    print(f"   Revised: {scene.image_result.metadata.revised_prompt}")
+                if scene.image_result.metadata.saved_filename:
+                    print(f"   Saved: {scene.image_result.metadata.saved_filename}")
+        else:
+            print("❌ Generation failed")
+    
+    print(f"\n📊 Summary:")
+    print(f"   Success Rate: {story_result.success_rate:.1f}%")
+    print(f"   Total Time: {story_result.total_generation_time:.2f}s")
+
+
 def main() -> int:
     """
     Main application entry point for image generation.
@@ -339,34 +390,89 @@ def main() -> int:
         logger.debug("Initializing image generation service")
         service = ImageGenerationService(api_key=api_key)
         
-        # Generate image
-        if args.verbose:
-            print("🚀 Generating image...")
+        # Check if this is story mode or single image mode
+        if args.story:
+            # Story generation mode
+            if args.verbose:
+                print(f"🎬 Generating story with {args.scenes} scenes...")
+            
+            # Create story options
+            story_options = StoryOptions(
+                story_prompt=args.prompt,
+                num_scenes=args.scenes,
+                model=args.model,
+                size=args.size,
+                quality=args.quality,
+                style=args.style,
+                auto_save=not args.no_save,
+                save_path=args.save_path
+            )
+            
+            logger.info(f"Executing story generation: '{args.prompt}' with {args.scenes} scenes")
+            with LogContext(logger, "Story generation", prompt=args.prompt, scenes=args.scenes):
+                story_result = service.generate_story(story_options)
+            
+            logger.info(f"Story generation completed: {len(story_result.completed_scenes)}/{args.scenes} scenes")
+            
+            # Display story results
+            display_story_results(story_result, verbose=args.verbose)
+            
+            # Show helpful information
+            if story_result.completed_scenes:
+                saved_files = story_result.get_scene_filenames()
+                if saved_files:
+                    # Check if files are in a story folder
+                    first_file = saved_files[0]
+                    if "story_" in first_file:
+                        # Extract the story folder from the first file path
+                        story_folder = os.path.dirname(first_file)
+                        print(f"\n✅ Story images saved in: {story_folder}")
+                        print(f"📁 Scene files:")
+                        for filename in saved_files:
+                            print(f"   • {os.path.basename(filename)}")
+                    else:
+                        print(f"\n✅ Story images saved:")
+                        for filename in saved_files:
+                            print(f"   • {filename}")
+                else:
+                    print(f"\n💡 Story images available online (not saved locally):")
+                    for i, url in enumerate(story_result.all_image_urls, 1):
+                        print(f"   • Scene {i}: {url}")
+                    print(f"   • Note: URLs expire in a few hours")
+                    print(f"   • Next time: remove --no-save to auto-download")
+            
+            if story_result.failed_scenes:
+                print(f"\n⚠️  {len(story_result.failed_scenes)} scene(s) failed to generate")
         
-        logger.info(f"Executing image generation: '{args.prompt}'")
-        with LogContext(logger, "Image generation", prompt=args.prompt, model=args.model):
-            if args.save_path:
-                # User provided custom save path - use generate_and_save
-                result = service.generate_and_save(args.prompt, args.save_path, options)
-            else:
-                # Use auto-save behavior (unless disabled)
-                auto_save = not args.no_save
-                result = service.generate_image(args.prompt, options, auto_save=auto_save)
-        
-        logger.info(f"Image generation completed: {result.generation_id}")
-        
-        # Display results
-        display_results(result, verbose=args.verbose)
-        
-        # Show helpful information based on what happened
-        if result.is_saved:
-            print(f"\n✅ Image saved to: {result.file_path}")
-            print(f"💡 You can also view it online: {result.image_url}")
-        elif result.image_url:
-            print(f"\n💡 Image available online (not saved locally):")
-            print(f"   • Visit: {result.image_url}")
-            print(f"   • Note: URL expires in a few hours")
-            print(f"   • Next time: remove --no-save to auto-download")
+        else:
+            # Single image generation mode
+            if args.verbose:
+                print("🚀 Generating image...")
+            
+            logger.info(f"Executing image generation: '{args.prompt}'")
+            with LogContext(logger, "Image generation", prompt=args.prompt, model=args.model):
+                if args.save_path:
+                    # User provided custom save path - use generate_and_save
+                    result = service.generate_and_save(args.prompt, args.save_path, options)
+                else:
+                    # Use auto-save behavior (unless disabled)
+                    auto_save = not args.no_save
+                    result = service.generate_image(args.prompt, options, auto_save=auto_save)
+            
+            logger.info(f"Image generation completed: {result.generation_id}")
+            
+            # Display results
+            display_results(result, verbose=args.verbose)
+            
+            # Show helpful information based on what happened
+            if result.is_saved:
+                print(f"\n✅ Image saved to: {result.file_path}")
+                print(f"💡 You can also view it online: {result.image_url}")
+            elif result.image_url:
+                print(f"\n💡 Image available online (not saved locally):")
+                print(f"   • Visit: {result.image_url}")
+                print(f"   • Note: URL expires in a few hours")
+                print(f"   • Next time: remove --no-save to auto-download")
         
         logger.info("Image generation application completed successfully")
         return 0

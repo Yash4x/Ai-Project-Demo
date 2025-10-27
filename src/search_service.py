@@ -42,12 +42,15 @@ LEARNING OBJECTIVES:
 import os
 import re
 import requests
-from typing import Optional
+from typing import Optional, List
 from datetime import datetime
 
 from src.client import ImageGenerationClient
 from src.parser import ImageResponseParser
-from src.models import ImageOptions, ImageResult, ImageError
+from src.models import (
+    ImageOptions, ImageResult, ImageError, 
+    StoryOptions, StoryScene, StoryResult
+)
 
 
 class ImageGenerationService:
@@ -408,3 +411,139 @@ class ImageGenerationService:
         filename = f"{clean_prompt}_{timestamp}_{generation_id}.png"
         
         return filename
+
+    def _get_next_story_folder(self, base_dir: str = "generated_images") -> str:
+        """
+        Get the next available story folder name.
+        
+        Creates folders like: generated_images/story_1, generated_images/story_2, etc.
+        
+        Args:
+            base_dir: Base directory for generated images
+            
+        Returns:
+            Path to the next story folder
+        """
+        import os
+        
+        # Ensure base directory exists
+        os.makedirs(base_dir, exist_ok=True)
+        
+        # Find the next available story number
+        story_num = 1
+        while True:
+            story_folder = os.path.join(base_dir, f"story_{story_num}")
+            if not os.path.exists(story_folder):
+                # Create the folder
+                os.makedirs(story_folder, exist_ok=True)
+                print(f"📁 Created story folder: {story_folder}")
+                return story_folder
+            story_num += 1
+
+    def generate_story(self, story_options: StoryOptions) -> StoryResult:
+        """
+        Generate a visual story from a prompt.
+        
+        This method:
+        1. Uses GPT to decompose the story into scenes
+        2. Generates an image for each scene
+        3. Optionally saves all images to local files
+        4. Returns a complete story result
+        
+        Args:
+            story_options: Configuration for story generation
+            
+        Returns:
+            StoryResult with all scenes and metadata
+            
+        Raises:
+            ImageError: If story generation fails
+        """
+        start_time = datetime.now()
+        
+        try:
+            # Step 1: Decompose story into scenes using GPT
+            print(f"🎬 Decomposing story: {story_options.story_prompt}")
+            scenes = self.client.decompose_story(story_options)
+            print(f"✅ Created {len(scenes)} scenes")
+            
+            # Step 1.5: Create dedicated story folder if auto_save is enabled
+            story_folder = None
+            if story_options.auto_save:
+                story_folder = self._get_next_story_folder()
+            
+            # Step 2: Generate images for each scene
+            for i, scene in enumerate(scenes, 1):
+                try:
+                    print(f"🎨 Generating scene {i}/{len(scenes)}: {scene.narrative}")
+                    
+                    # Create image options for this scene
+                    image_options = ImageOptions(
+                        model=story_options.model,
+                        size=story_options.size,
+                        quality=story_options.quality,
+                        style=story_options.style
+                    )
+                    
+                    # Generate the image using the scene's image prompt
+                    if story_options.auto_save and story_folder:
+                        # Use the story folder as save directory
+                        scene.image_result = self.generate_image(
+                            scene.image_prompt,  # Use the detailed image prompt
+                            image_options, 
+                            auto_save=True,
+                            save_dir=story_folder
+                        )
+                    else:
+                        # Standard generation without saving
+                        scene.image_result = self.generate_image(
+                            scene.image_prompt,  # Use the detailed image prompt
+                            image_options, 
+                            auto_save=False
+                        )
+                    
+                    print(f"✅ Scene {i} generated successfully")
+                    
+                except Exception as e:
+                    print(f"❌ Scene {i} failed: {str(e)}")
+                    # Continue with other scenes even if one fails
+                    continue
+            
+            # Step 3: Create story result
+            total_time = (datetime.now() - start_time).total_seconds()
+            
+            story_result = StoryResult(
+                story_prompt=story_options.story_prompt,
+                scenes=scenes,
+                generation_time=start_time,
+                total_generation_time=total_time
+            )
+            
+            # Step 4: Print summary
+            completed = len(story_result.completed_scenes)
+            total = len(scenes)
+            print(f"\n🎭 Story Generation Complete!")
+            print(f"📊 Success Rate: {story_result.success_rate:.1f}% ({completed}/{total} scenes)")
+            print(f"⏱️  Total Time: {total_time:.2f} seconds")
+            
+            if story_options.auto_save and story_result.completed_scenes:
+                if story_folder:
+                    print(f"📁 Story saved in: {story_folder}")
+                    print(f"💾 Scene files:")
+                    for filename in story_result.get_scene_filenames():
+                        # Show just the filename, since we already showed the folder
+                        print(f"   - {os.path.basename(filename)}")
+                else:
+                    print(f"💾 Saved files:")
+                    for filename in story_result.get_scene_filenames():
+                        print(f"   - {filename}")
+            
+            return story_result
+            
+        except Exception as e:
+            if isinstance(e, ImageError):
+                raise
+            raise ImageError(
+                "STORY_GENERATION_ERROR",
+                f"Failed to generate story: {str(e)}"
+            )

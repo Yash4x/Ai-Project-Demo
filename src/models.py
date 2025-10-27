@@ -25,7 +25,7 @@ LEARNING OBJECTIVES:
 
 from dataclasses import dataclass
 from datetime import datetime
-from typing import Optional, List, Dict, Any
+from typing import Optional, List, Dict, Any, Union
 
 
 # ============================================================================
@@ -387,15 +387,128 @@ class ImageError(Exception):
         """
         Format error for display.
         
-        💡 PATTERN: Structured Error Messages
-        --------------------------------------
+        PATTERN: Structured Error Messages
+        ----------------------------------
         Format: [CODE] Message
         Example: [CONTENT_POLICY_ERROR] Prompt violates usage policies
         
         This makes logs searchable:
-        $ grep "CONTENT_POLICY_ERROR" logs.txt
+        grep "CONTENT_POLICY_ERROR" logs.txt
         """
         error_str = f"[{self.code}] {self.message}"
         if self.details:
             error_str += f" | Details: {self.details}"
         return error_str
+
+
+# ============================================================================
+# BLUEPRINT 5: Story Generation Models
+# ============================================================================
+
+@dataclass
+class StoryOptions:
+    """
+    Configuration options for story-based image generation.
+    
+    CONCEPT: Story Generation
+    -------------------------
+    Instead of generating a single image, we break down a story prompt
+    into multiple scenes and generate an image for each scene.
+    
+    Example: "A cat going to shop for watermelons"
+    Becomes 5 scenes:
+    1. Cat waking up and deciding to go shopping
+    2. Cat walking to the market
+    3. Cat examining watermelons at the fruit stand
+    4. Cat selecting and purchasing a watermelon
+    5. Cat walking home happily with the watermelon
+    """
+    # Story configuration
+    story_prompt: str
+    num_scenes: int = 5
+    
+    # Image generation options for each scene
+    model: str = "dall-e-3"
+    size: str = "1024x1024" 
+    quality: str = "standard"
+    style: str = "vivid"
+    
+    # Auto-save options
+    auto_save: bool = True
+    save_path: Optional[str] = None
+
+
+@dataclass
+class StoryScene:
+    """
+    Individual scene in a visual story.
+    
+    CONCEPT: Scene Decomposition
+    ----------------------------
+    Each scene represents one moment in the story timeline.
+    Contains both the narrative description and visual prompt.
+    """
+    scene_number: int
+    narrative: str  # Brief description of what happens
+    image_prompt: str  # Detailed prompt for image generation
+    image_result: Optional[ImageResult] = None
+    
+    @property
+    def is_generated(self) -> bool:
+        """Check if this scene has been generated."""
+        return self.image_result is not None
+
+
+@dataclass  
+class StoryResult:
+    """
+    Container for story generation results.
+    
+    CONCEPT: Aggregated Results
+    ---------------------------
+    Combines all scenes into a cohesive story result.
+    Provides convenient methods for accessing story data.
+    """
+    story_prompt: str
+    scenes: List[StoryScene]
+    generation_time: datetime
+    total_generation_time: float = 0.0
+    
+    @property
+    def num_scenes(self) -> int:
+        """Number of scenes in the story."""
+        return len(self.scenes)
+    
+    @property
+    def completed_scenes(self) -> List[StoryScene]:
+        """List of successfully generated scenes."""
+        return [scene for scene in self.scenes if scene.is_generated]
+    
+    @property
+    def failed_scenes(self) -> List[StoryScene]:
+        """List of scenes that failed to generate."""
+        return [scene for scene in self.scenes if not scene.is_generated]
+    
+    @property
+    def success_rate(self) -> float:
+        """Percentage of successfully generated scenes."""
+        if not self.scenes:
+            return 0.0
+        return (len(self.completed_scenes) / len(self.scenes)) * 100
+    
+    @property
+    def all_image_urls(self) -> List[str]:
+        """Get all generated image URLs."""
+        urls = []
+        for scene in self.completed_scenes:
+            if scene.image_result and scene.image_result.image_url:
+                urls.append(scene.image_result.image_url)
+        return urls
+    
+    def get_scene_filenames(self) -> List[str]:
+        """Get saved filenames for all scenes."""
+        filenames = []
+        for scene in self.completed_scenes:
+            if scene.image_result and scene.image_result.file_path:
+                filenames.append(scene.image_result.file_path)
+        return filenames

@@ -126,6 +126,55 @@ Build an AI image generation application using **OpenAI's DALL-E APIs** while ma
 
 ---
 
+## 🎨 Features
+
+### Single Image Generation
+Generate beautiful images from text prompts using OpenAI's DALL-E models:
+
+```bash
+python -m src.main "A cat wearing a space helmet"
+python -m src.main "Sunset over mountains" --model dall-e-2
+python -m src.main "Abstract art" --save-path ./my_image.png
+```
+
+### 🎬 Story Generation (New!)
+Create visual stories with 5 sequential images that tell a complete narrative:
+
+```bash
+# Generate a 5-scene story
+python -m src.main "A cat going to shop for watermelons" --story
+
+# Custom number of scenes
+python -m src.main "A robot learning to dance" --story --scenes 3
+
+# Interactive demo
+python demo_story_generation.py
+```
+
+**How it works:**
+1. GPT-4 breaks your story into sequential scenes
+2. Each scene gets a detailed visual description
+3. DALL-E generates an image for each scene
+4. All images are saved in organized story folders (`generated_images/story_1/`, `story_2/`, etc.)
+
+**Example Story Output:**
+- Scene 1: Cat decides to go shopping
+- Scene 2: Cat walks to the market  
+- Scene 3: Cat examines watermelons
+- Scene 4: Cat selects the perfect watermelon
+- Scene 5: Cat returns home triumphant
+
+**Organization**: Each story gets its own folder (story_1, story_2, etc.) for easy browsing!
+
+### Additional Features
+- **Smart Auto-save**: Images saved to `generated_images/` with descriptive names
+- **Multiple Models**: DALL-E 2 & 3 support with quality/style options
+- **Flexible Saving**: Custom paths, auto-save, or URL-only modes
+- **Comprehensive Logging**: Track all operations with structured logs
+- **Error Recovery**: Graceful handling of API limits and content policies
+
+---
+
 ## ⚡ Quick Start (5 Minutes)
 
 **Prerequisites:** Python 3.11 or higher ([Download](https://python.org))

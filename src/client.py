@@ -29,7 +29,7 @@ LEARNING OBJECTIVES:
 """
 
 import os
-from typing import Optional, Dict, Any
+from typing import Optional, Dict, Any, List
 
 # OpenAI's official Python library - handles HTTPS, auth, retries
 from openai import OpenAI, AuthenticationError, RateLimitError, APIError
@@ -38,7 +38,7 @@ from openai import OpenAI, AuthenticationError, RateLimitError, APIError
 from dotenv import load_dotenv
 
 # Our data models from Chapter 1
-from src.models import ImageOptions, ImageError
+from src.models import ImageOptions, ImageError, StoryOptions, StoryScene
 
 
 # ============================================================================
@@ -322,3 +322,96 @@ class ImageGenerationClient:
             result["data"].append(image_dict)
         
         return result
+
+    def decompose_story(self, story_options: StoryOptions) -> List[StoryScene]:
+        """
+        Decompose a story prompt into individual scenes using GPT.
+        
+        This method uses GPT to break down a story into sequential scenes,
+        each with a narrative description and detailed image prompt.
+        
+        Args:
+            story_options: Configuration for story generation
+            
+        Returns:
+            List of StoryScene objects, one for each scene
+            
+        Raises:
+            ImageError: If story decomposition fails
+        """
+        try:
+            # Create a detailed prompt for GPT to decompose the story
+            system_prompt = f"""You are a creative storyteller and visual artist. Your task is to break down a story prompt into exactly {story_options.num_scenes} sequential scenes for image generation.
+
+For each scene, provide:
+1. A brief narrative description (1-2 sentences) of what happens
+2. A detailed, visual prompt for image generation (3-4 sentences) that describes the scene in rich visual detail
+
+Focus on:
+- Clear progression from scene to scene
+- Rich visual descriptions suitable for AI image generation
+- Consistent characters and setting throughout
+- Cinematic composition and lighting details
+
+Output format: Return a JSON array with {story_options.num_scenes} objects, each containing "narrative" and "image_prompt" fields."""
+
+            user_prompt = f"Story to break down: {story_options.story_prompt}"
+
+            # Call GPT to decompose the story
+            response = self.client.chat.completions.create(
+                model="gpt-4o-mini",  # Using the efficient model for text generation
+                messages=[
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": user_prompt}
+                ],
+                response_format={"type": "json_object"},
+                temperature=0.7,
+                max_tokens=2000
+            )
+
+            # Parse the JSON response
+            import json
+            story_data = json.loads(response.choices[0].message.content)
+            
+            # Convert to StoryScene objects
+            scenes = []
+            if isinstance(story_data, dict) and "scenes" in story_data:
+                scene_list = story_data["scenes"]
+            elif isinstance(story_data, list):
+                scene_list = story_data
+            else:
+                raise ImageError(
+                    "STORY_PARSING_ERROR",
+                    "Unexpected response format from GPT"
+                )
+
+            for i, scene_data in enumerate(scene_list[:story_options.num_scenes]):
+                scene = StoryScene(
+                    scene_number=i + 1,
+                    narrative=scene_data.get("narrative", f"Scene {i + 1}"),
+                    image_prompt=scene_data.get("image_prompt", scene_data.get("narrative", f"Scene {i + 1}"))
+                )
+                scenes.append(scene)
+
+            # Ensure we have the right number of scenes
+            while len(scenes) < story_options.num_scenes:
+                scenes.append(StoryScene(
+                    scene_number=len(scenes) + 1,
+                    narrative=f"Additional scene {len(scenes) + 1}",
+                    image_prompt=f"Continue the story of {story_options.story_prompt}, scene {len(scenes) + 1}"
+                ))
+
+            return scenes
+
+        except json.JSONDecodeError as e:
+            raise ImageError(
+                "STORY_PARSING_ERROR",
+                f"Failed to parse GPT response as JSON: {str(e)}"
+            )
+        except Exception as e:
+            if isinstance(e, ImageError):
+                raise
+            raise ImageError(
+                "STORY_DECOMPOSITION_ERROR",
+                f"Failed to decompose story: {str(e)}"
+            )
