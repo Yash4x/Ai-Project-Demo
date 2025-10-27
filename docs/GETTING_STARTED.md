@@ -1,6 +1,6 @@
-# 🚀 Getting Started Guide
+# 🎨 Getting Started Guide
 
-**Goal:** Get the application running on your machine in 5-10 minutes.
+**Goal:** Get the AI image generation application running on your machine in 5-10 minutes.
 
 ---
 
@@ -116,18 +116,25 @@ pytest
 ### Run the Application
 
 ```bash
-python -m src.main "latest developments in AI"
+python -m src.main "A cat wearing a space helmet"
 ```
 
 **Expected output:**
 ```
-🔍 Searching: latest developments in AI
+🎨 Generating image with DALL-E...
 
-📝 AI-Generated Summary:
-Recent developments in artificial intelligence include...
-[... AI-generated response ...]
+================================================================================
+Image Generated Successfully
+================================================================================
 
-📚 Sources Consulted:
+Prompt: A cat wearing a space helmet
+Model: dall-e-3 (1024x1024)
+Generated: 2024-10-27 13:15:45
+
+Image URL: https://oaidalleapi.azureedge.net/...
+Status: ⏳ Ready for download
+ID: gen-abc12345
+================================================================================
 [1] Title (url)
 [2] Title (url)
 ...

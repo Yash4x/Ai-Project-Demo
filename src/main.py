@@ -1,19 +1,48 @@
 """
-Main application entry point for the web search demo.
+📖 CHAPTER 5: THE APPLICATION - Image Generation CLI
+=====================================================
 
-This module provides the CLI interface for the web search application.
+STORY: The Grand Finale
+------------------------
+We've built all the pieces:
+- Models (the blueprints) - Chapter 1
+- Client (the messenger) - Chapter 2  
+- Parser (the translator) - Chapter 3
+- Service (the orchestrator) - Chapter 4
+
+Now we need a way for USERS to interact with our system. That's the Application!
+
+Think of this like the front desk at a hotel:
+- Guest walks up → "I'd like to generate an image"
+- Clerk validates → "What would you like to create?"
+- Clerk coordinates → Calls the service to handle the request
+- Clerk presents results → Shows the generated image location
+
+This is the "presentation layer" - it handles:
+- Command-line arguments (what the user wants)
+- User feedback (progress, errors, success)
+- Output formatting (making results readable)
+- Error handling (explaining what went wrong)
+
+LEARNING OBJECTIVES:
+-------------------
+✓ Understand CLI design and user experience
+✓ Learn argument parsing and validation
+✓ Master error handling and user feedback
+✓ See how to coordinate all application layers
+✓ Appreciate the full application architecture
 """
 
 import os
 import sys
 import argparse
-from typing import List
+from typing import Optional
 
 from dotenv import load_dotenv
 
-from src.search_service import SearchService
-from src.parser import ResponseParser
-from src.models import SearchOptions, SearchResult, Citation, SearchError
+from src.search_service import ImageGenerationService
+from src.parser import ImageResponseParser
+from src.models import ImageOptions, ImageResult, ImageError
 from src.logging_config import setup_logging, get_logger, LogContext
 
 
@@ -32,47 +61,111 @@ app_logger = setup_logging(
 
 def parse_arguments() -> argparse.Namespace:
     """
-    Parse command-line arguments.
+    Parse command-line arguments for image generation.
+    
+    📚 CONCEPT: Command-Line Interface Design
+    -----------------------------------------
+    A good CLI should be:
+    - Intuitive (obvious what each argument does)
+    - Consistent (follows common patterns)
+    - Helpful (good help text and examples)
+    - Forgiving (sensible defaults)
+    
+    🎯 DESIGN DECISIONS:
+    -------------------
+    - Required: prompt (the main thing users want to do)
+    - Optional: all technical details (most users want simple defaults)
+    - Descriptive: help text explains what each option does
+    - Examples: show common usage patterns
     
     Returns:
-        Parsed arguments
+        Parsed arguments namespace
     """
     parser = argparse.ArgumentParser(
-        description="Web Search Demo - Search the web using OpenAI's API",
+        description="AI Image Generator - Create images from text prompts using DALL-E",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Examples:
-  %(prog)s "What are the latest AI developments?"
-  %(prog)s "Python 3.12 new features" --model gpt-5
-  %(prog)s "climate news" --domains bbc.com,cnn.com
+  %(prog)s "A cat wearing a space helmet"                    # Auto-saves to ./generated_images/
+  %(prog)s "Sunset over mountains" --model dall-e-2         # Use DALL-E 2 model
+  %(prog)s "Abstract art" --save-path ./my_image.png        # Custom save location
+  %(prog)s "A robot" --no-save                              # Don't save locally
         """
     )
     
+    # Required: The prompt
     parser.add_argument(
-        "query",
+        "prompt",
         type=str,
-        help="The search query"
+        help="Text prompt describing the image to generate"
     )
     
+    # Optional: Model selection
     parser.add_argument(
         "--model",
         type=str,
-        default="gpt-4o-mini",
-        help="OpenAI model to use (default: gpt-4o-mini)"
+        default="dall-e-3",
+        choices=["dall-e-2", "dall-e-3"],
+        help="AI model to use (default: dall-e-3)"
     )
     
+    # Optional: Image size
     parser.add_argument(
-        "--domains",
+        "--size",
         type=str,
-        help="Comma-separated list of allowed domains (e.g., 'example.com,test.com')"
+        default="1024x1024",
+        help="Image size: '1024x1024', '1792x1024', '1024x1792' (DALL-E 3) or '256x256', '512x512', '1024x1024' (DALL-E 2)"
     )
     
+    # Optional: Quality (DALL-E 3 only)
+    parser.add_argument(
+        "--quality",
+        type=str,
+        default="standard",
+        choices=["standard", "hd"],
+        help="Image quality for DALL-E 3 (default: standard)"
+    )
+    
+    # Optional: Style (DALL-E 3 only)
+    parser.add_argument(
+        "--style",
+        type=str,
+        default="vivid",
+        choices=["vivid", "natural"],
+        help="Image style for DALL-E 3 (default: vivid)"
+    )
+    
+    # Optional: Response format
+    parser.add_argument(
+        "--format",
+        type=str,
+        default="url",
+        choices=["url", "b64_json"],
+        help="Response format: 'url' for image URL or 'b64_json' for base64 data (default: url)"
+    )
+    
+    # Optional: Custom save path (overrides auto-generated path)
+    parser.add_argument(
+        "--save-path",
+        type=str,
+        help="Custom path to save the image (default: auto-generated in ./generated_images/)"
+    )
+    
+    # Optional: Disable auto-save
+    parser.add_argument(
+        "--no-save",
+        action="store_true",
+        help="Don't automatically download and save the image locally"
+    )
+    
+    # Optional: Verbose output
     parser.add_argument(
         "--verbose",
         action="store_true",
-        help="Enable verbose output"
+        help="Enable verbose output with detailed information"
     )
     
+    # Optional: API key override
     parser.add_argument(
         "--api-key",
         type=str,
@@ -82,41 +175,113 @@ Examples:
     return parser.parse_args()
 
 
-def display_results(result: SearchResult) -> None:
+def display_results(result: ImageResult, verbose: bool = False) -> None:
     """
-    Display search results to the user.
+    Display image generation results to the user.
+    
+    📚 CONCEPT: User Experience Design
+    ----------------------------------
+    This function is all about making the user happy. It should:
+    - Show the most important info first (success/failure)
+    - Present technical details clearly
+    - Guide users on next steps
+    - Handle both success and error cases gracefully
     
     Args:
-        result: The search result to display
+        result: The image generation result to display
+        verbose: Whether to show detailed information
     """
-    parser = ResponseParser()
+    parser = ImageResponseParser()
     formatted = parser.format_for_display(result)
     print(formatted)
+    
+    # In verbose mode, show additional technical details
+    if verbose:
+        print("\nTechnical Details:")
+        print(f"Generation ID: {result.generation_id}")
+        print(f"Timestamp: {result.timestamp}")
+        if result.metadata:
+            print(f"Model: {result.metadata.model}")
+            print(f"Size: {result.metadata.size}")
+            if result.metadata.quality:
+                print(f"Quality: {result.metadata.quality}")
+            if result.metadata.style:
+                print(f"Style: {result.metadata.style}")
+        
+        if result.file_size:
+            print(f"File size: {result.file_size:,} bytes")
 
 
-def format_citations(citations: List[Citation]) -> str:
+def validate_arguments(args: argparse.Namespace) -> None:
     """
-    Format a list of citations for display.
+    Validate command-line arguments for consistency.
+    
+    📚 CONCEPT: Input Validation
+    ----------------------------
+    Some combinations of arguments don't make sense. It's better to catch
+    these early and give clear error messages than to let users waste time
+    and API credits on invalid requests.
     
     Args:
-        citations: List of citations
+        args: Parsed command-line arguments
         
-    Returns:
-        Formatted string
+    Raises:
+        ValueError: If arguments are invalid or inconsistent
     """
-    if not citations:
-        return "No citations found"
+    # Validate size based on model
+    if args.model == "dall-e-2":
+        valid_sizes = ["256x256", "512x512", "1024x1024"]
+        if args.size not in valid_sizes:
+            raise ValueError(
+                f"Invalid size '{args.size}' for DALL-E 2. "
+                f"Valid sizes: {', '.join(valid_sizes)}"
+            )
+    elif args.model == "dall-e-3":
+        valid_sizes = ["1024x1024", "1792x1024", "1024x1792"]
+        if args.size not in valid_sizes:
+            raise ValueError(
+                f"Invalid size '{args.size}' for DALL-E 3. "
+                f"Valid sizes: {', '.join(valid_sizes)}"
+            )
     
-    lines = []
-    for i, citation in enumerate(citations, 1):
-        lines.append(f"[{i}] {citation.title} - {citation.url}")
+    # DALL-E 2 doesn't support quality or style
+    if args.model == "dall-e-2":
+        if args.quality != "standard":
+            raise ValueError("Quality setting only supported for DALL-E 3")
+        if args.style != "vivid":
+            raise ValueError("Style setting only supported for DALL-E 3")
     
-    return "\n".join(lines)
+    # Validate save path if provided (but it's optional now)
+    if args.save_path:
+        import os
+        save_dir = os.path.dirname(args.save_path)
+        if save_dir and not os.path.exists(save_dir):
+            try:
+                os.makedirs(save_dir)
+            except OSError as e:
+                raise ValueError(f"Cannot create save directory '{save_dir}': {e}")
 
 
 def main() -> int:
     """
-    Main application entry point.
+    Main application entry point for image generation.
+    
+    📚 CONCEPT: Application Architecture
+    ------------------------------------
+    This is the "conductor" of our application orchestra. It coordinates:
+    1. Argument parsing (what does the user want?)
+    2. Validation (is the request valid?)
+    3. Service initialization (set up our tools)
+    4. Business logic execution (do the work)
+    5. Result presentation (show the user what happened)
+    6. Error handling (what if something goes wrong?)
+    
+    🎯 ERROR HANDLING STRATEGY:
+    ---------------------------
+    - Expected errors (ImageError) → user-friendly messages
+    - Input errors (ValueError) → helpful validation messages  
+    - Unexpected errors (Exception) → technical details for debugging
+    - User cancellation (KeyboardInterrupt) → graceful exit
     
     Returns:
         Exit code (0 for success, non-zero for error)
@@ -125,85 +290,123 @@ def main() -> int:
     
     try:
         # Log application start
-        logger.info("Web search application started")
+        logger.info("Image generation application started")
         
         # Parse command line arguments
         args = parse_arguments()
         logger.debug(
-            f"Parsed arguments: query='{args.query}', "
-            f"model={args.model}, domains={args.domains}"
+            f"Parsed arguments: prompt='{args.prompt}', "
+            f"model={args.model}, size={args.size}"
         )
         
+        # Validate arguments
+        validate_arguments(args)
+        
         # Verbose logging
-        if args.verbose:  # pragma: no cover
-            # Verbose mode - logged but not tested in unit tests
-            print(f"Using model: {args.model}")
-            print(f"Query: {args.query}")
-            if args.domains:
-                print(f"Domain filter: {args.domains}")
+        if args.verbose:
+            print(f"🎨 Generating image with DALL-E...")
+            print(f"Model: {args.model}")
+            print(f"Size: {args.size}")
+            print(f"Prompt: {args.prompt}")
+            if args.save_path:
+                print(f"Custom save path: {args.save_path}")
+            elif not args.no_save:
+                print(f"Auto-save: ./generated_images/")
+            else:
+                print(f"Save: Disabled")
             print()
         
-        # Create search options
-        options = SearchOptions(model=args.model)
-        logger.debug(f"Created search options: model={options.model}")
+        # Create image options
+        options = ImageOptions(
+            model=args.model,
+            size=args.size,
+            quality=args.quality,
+            style=args.style,
+            response_format=args.format
+        )
+        logger.debug(f"Created image options: {options}")
         
-        if args.domains:
-            domain_list = [d.strip() for d in args.domains.split(",")]
-            options.allowed_domains = domain_list
-            logger.info(f"Domain filtering enabled: {domain_list}")
-        
-        # Get API key
-        api_key = os.getenv("OPENAI_API_KEY")
+        # Get API key (try argument first, then environment)
+        api_key = args.api_key or os.getenv("OPENAI_API_KEY")
         if not api_key:
-            logger.error("OPENAI_API_KEY not found in environment")
-            raise ValueError("OPENAI_API_KEY not found in environment variables")
+            logger.error("OpenAI API key not provided")
+            raise ValueError(
+                "OpenAI API key required. Set OPENAI_API_KEY environment variable "
+                "or use --api-key argument"
+            )
         
         # Initialize service
-        logger.debug("Initializing search service")
-        service = SearchService(api_key=api_key)
+        logger.debug("Initializing image generation service")
+        service = ImageGenerationService(api_key=api_key)
         
-        # Perform search
+        # Generate image
         if args.verbose:
-            print("Searching...\n")
+            print("🚀 Generating image...")
         
-        logger.info(f"Executing search query: '{args.query}'")
-        with LogContext(logger, "Web search", query=args.query, model=args.model):
-            result = service.search(args.query, options)
+        logger.info(f"Executing image generation: '{args.prompt}'")
+        with LogContext(logger, "Image generation", prompt=args.prompt, model=args.model):
+            if args.save_path:
+                # User provided custom save path - use generate_and_save
+                result = service.generate_and_save(args.prompt, args.save_path, options)
+            else:
+                # Use auto-save behavior (unless disabled)
+                auto_save = not args.no_save
+                result = service.generate_image(args.prompt, options, auto_save=auto_save)
         
-        logger.info(f"Search completed: {len(result.citations)} citations found")
+        logger.info(f"Image generation completed: {result.generation_id}")
         
         # Display results
-        display_results(result)
+        display_results(result, verbose=args.verbose)
         
-        logger.info("Web search application completed successfully")
+        # Show helpful information based on what happened
+        if result.is_saved:
+            print(f"\n✅ Image saved to: {result.file_path}")
+            print(f"💡 You can also view it online: {result.image_url}")
+        elif result.image_url:
+            print(f"\n💡 Image available online (not saved locally):")
+            print(f"   • Visit: {result.image_url}")
+            print(f"   • Note: URL expires in a few hours")
+            print(f"   • Next time: remove --no-save to auto-download")
+        
+        logger.info("Image generation application completed successfully")
         return 0
         
-    except SearchError as e:  # pragma: no cover
-        # Error display - tested via integration tests, not unit tests
-        logger.error(f"Search error occurred: {e}", exc_info=True)
-        print(f"\n❌ Search Error: {e}", file=sys.stderr)
+    except ImageError as e:
+        # Image generation specific errors
+        logger.error(f"Image generation error: {e}", exc_info=True)
+        print(f"\n❌ Image Generation Error: {e}", file=sys.stderr)
+        
+        # Provide helpful hints based on error type
+        if e.code == "CONTENT_POLICY_ERROR":
+            print("💡 Try rephrasing your prompt to avoid potentially problematic content.", file=sys.stderr)
+        elif e.code == "RATE_LIMIT_ERROR":
+            print("💡 Wait a moment and try again. Consider upgrading your OpenAI plan.", file=sys.stderr)
+        elif e.code == "AUTHENTICATION_ERROR":
+            print("💡 Check your API key. Visit https://platform.openai.com/api-keys", file=sys.stderr)
+        
         return 1
         
-    except ValueError as e:  # pragma: no cover
-        # Error display - tested via integration tests, not unit tests
+    except ValueError as e:
+        # Input validation errors
         logger.error(f"Invalid input: {e}", exc_info=True)
         print(f"\n❌ Invalid Input: {e}", file=sys.stderr)
+        print("💡 Use --help to see valid options.", file=sys.stderr)
         return 1
         
-    except KeyboardInterrupt:  # pragma: no cover
-        logger.warning("Search cancelled by user (KeyboardInterrupt)")
-        print("\n\nSearch cancelled by user.", file=sys.stderr)
+    except KeyboardInterrupt:
+        logger.warning("Image generation cancelled by user (KeyboardInterrupt)")
+        print("\n\n🛑 Generation cancelled by user.", file=sys.stderr)
         return 130
         
-    except Exception as e:  # pragma: no cover
+    except Exception as e:
         # Defensive fallback for unexpected errors
         logger.critical(f"Unexpected error: {e}", exc_info=True)
         print(f"\n❌ Unexpected Error: {e}", file=sys.stderr)
-        if args.verbose if 'args' in locals() else False:
+        if 'args' in locals() and args.verbose:
             import traceback
             traceback.print_exc()
         return 1
 
 
-if __name__ == "__main__":  # pragma: no cover
+if __name__ == "__main__":
     sys.exit(main())

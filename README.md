@@ -1,4 +1,4 @@
-# 🚀 Enterprise AI Development
+# 🎨 Enterprise AI Image Generation
 
 > **Learn professional software development by building a real AI application**
 
@@ -10,7 +10,7 @@
 
 ## What You'll Learn in 2 Weeks
 
-Build a creative AI application using **OpenAI's APIs** while mastering:
+Build an AI image generation application using **OpenAI's DALL-E APIs** while mastering:
 
 **Test-Driven Development** • **Clean Architecture** • **Enterprise Logging** • **Professional Git** • **CI/CD**
 
@@ -79,7 +79,7 @@ Build a creative AI application using **OpenAI's APIs** while mastering:
 
 ## 🏗️ What This Repository Demonstrates
 
-**A production-quality AI web search application** that shows you:
+**A production-quality AI image generation application** that shows you:
 
 ```
 📂 Architecture                      What You'll Learn
@@ -146,7 +146,7 @@ cp .env.example .env
 
 # Verify it works
 pytest
-python -m src.main "latest AI developments"
+python -m src.main "A cat wearing a space helmet"  # Images auto-save to ./generated_images/
 ```
 
 ✅ **Working?** Great! Next: **[Read Course Structure →](docs/COURSE_STRUCTURE.md)**
@@ -163,24 +163,24 @@ Every file has narrative comments explaining concepts, design decisions, and alt
 **Traditional code:**
 ```python
 @dataclass
-class SearchOptions:
-    model: str = "gpt-4o-mini"
+class ImageOptions:
+    model: str = "dall-e-3"
 ```
 
 **Our teaching code:**
 ```python
 @dataclass
-class SearchOptions:
+class ImageOptions:
     """
     📚 CONCEPT: Dataclasses auto-generate __init__, __repr__, __eq__
     
-    📝 DESIGN: We default to "gpt-4o-mini" (fastest, cheapest for learning)
+    📝 DESIGN: We default to "dall-e-3" (highest quality for best results)
     
     EXAMPLE:
-    >>> options = SearchOptions()  # Uses defaults
-    >>> options = SearchOptions(model="gpt-4o")  # Override for production
+    >>> options = ImageOptions()  # Uses defaults
+    >>> options = ImageOptions(model="dall-e-2")  # Override for speed
     """
-    model: str = "gpt-4o-mini"
+    model: str = "dall-e-3"
 ```
 
 ### 2. **TDD is Non-Negotiable**

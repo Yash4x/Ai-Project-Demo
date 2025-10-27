@@ -2,18 +2,17 @@
 📖 CHAPTER 1: THE FOUNDATION - DATA MODELS
 ==========================================
 
-STORY: Building Blocks of Our Application
-------------------------------------------
+STORY: Building Blocks of Our Image Generation Application
+----------------------------------------------------------
 Imagine you're building a house. Before you start construction, you need blueprints.
 In software, these blueprints are called "data models" - they define the shape and
 structure of the information flowing through your application.
 
-This is where our story begins. We'll create five essential blueprints:
-1. SearchOptions - What the user wants to search for (the request)
-2. Citation - Where information came from (the evidence)
-3. Source - Which websites were consulted (the references)
-4. SearchResult - The complete answer (the response)
-5. SearchError - When things go wrong (the exception handling)
+This is where our story begins. We'll create essential blueprints for image generation:
+1. ImageOptions - Configuration for image generation (the request)
+2. ImageMetadata - Information about the generated image (the details)
+3. ImageResult - The complete result with image data (the response)
+4. ImageError - When things go wrong (the exception handling)
 
 LEARNING OBJECTIVES:
 -------------------
@@ -30,279 +29,266 @@ from typing import Optional, List, Dict, Any
 
 
 # ============================================================================
-# BLUEPRINT 1: SearchOptions - Configuring the Search
+# BLUEPRINT 1: ImageOptions - Configuring Image Generation
 # ============================================================================
 
 @dataclass
-class SearchOptions:
+class ImageOptions:
     """
-    Configuration options for web search requests.
+    Configuration options for image generation requests.
     
     📚 CONCEPT: Dataclasses
     -----------------------
     The @dataclass decorator is Python's way of saying "this is just data."
     It automatically generates __init__, __repr__, and __eq__ methods.
     
-    Think of it like filling out a form:
-    - model: Which AI model to use (like choosing your search engine)
-    - allowed_domains: Only search these websites (like Google site:example.com)
-    - user_location: Where you're searching from (for local results)
-    - reasoning_effort: How hard the AI should think ("low", "medium", "high")
+    Think of it like filling out a form for an art commission:
+    - model: Which AI model to use for generation (dall-e-3, dall-e-2)
+    - size: Image dimensions (1024x1024, 1792x1024, etc.)
+    - quality: Image quality level (standard, hd)
+    - style: Art style (vivid, natural)
+    - response_format: How to return image (url, b64_json)
     
     📝 DESIGN DECISION: Default Values
     ----------------------------------
     Notice the = signs? These are default values. If you don't specify a model,
-    it defaults to "gpt-4o-mini" (the fastest, cheapest option for learning).
+    it defaults to "dall-e-3" (the highest quality option).
     
     EXAMPLE USAGE:
     >>> # Use all defaults
-    >>> options = SearchOptions()
+    >>> options = ImageOptions()
     >>> 
     >>> # Customize for your needs
-    >>> options = SearchOptions(
-    ...     model="gpt-4o",
-    ...     allowed_domains=["python.org", "docs.python.org"],
-    ...     reasoning_effort="high"
+    >>> options = ImageOptions(
+    ...     model="dall-e-2",
+    ...     size="512x512",
+    ...     quality="standard"
     ... )
     """
     
-    # Which AI model processes the search (default: fastest option)
-    model: str = "gpt-4o-mini"
+    # Which AI model to use for image generation
+    model: str = "dall-e-3"
     
-    # Optional: restrict search to specific domains (None = search anywhere)
-    allowed_domains: Optional[List[str]] = None
+    # Image size (dall-e-3: 1024x1024, 1792x1024, 1024x1792; dall-e-2: 256x256, 512x512, 1024x1024)
+    size: str = "1024x1024"
     
-    # Optional: user's location for localized results
-    user_location: Optional[Dict[str, Any]] = None
+    # Image quality (dall-e-3 only: "standard" or "hd")
+    quality: str = "standard"
     
-    # How much computational effort to use ("low", "medium", "high")
-    reasoning_effort: str = "low"
+    # Style (dall-e-3 only: "vivid" or "natural")
+    style: str = "vivid"
+    
+    # Response format ("url" or "b64_json")
+    response_format: str = "url"
+    
+    # Number of images to generate (1-10 for dall-e-2, only 1 for dall-e-3)
+    n: int = 1
 
 
 # ============================================================================
-# BLUEPRINT 2: Citation - Tracking Where Information Came From
+# BLUEPRINT 2: ImageMetadata - Information About Generated Images
 # ============================================================================
 
 @dataclass
-class Citation:
+class ImageMetadata:
     """
-    Represents a citation from a web search result.
+    Metadata about a generated image.
     
-    📚 CONCEPT: Academic Integrity Meets Code
-    ------------------------------------------
-    Just like citing sources in a research paper, our AI tells us exactly
-    where each piece of information came from. This builds trust and allows
-    fact-checking.
+    📚 CONCEPT: Image Metadata
+    --------------------------
+    Just like photos from your camera contain EXIF data (when taken, camera settings),
+    our generated images have metadata about how they were created.
     
-    Think of this like highlighting text in a book:
-    - url: Which website (the book's title)
-    - title: Page title (the chapter name)
-    - start_index: Where the quote starts (page number, line 5)
-    - end_index: Where the quote ends (page number, line 12)
+    Think of this like a recipe card for a dish:
+    - prompt: What you asked for (the recipe name)
+    - revised_prompt: What the AI actually made (chef's interpretation)
+    - size: Image dimensions (serving size)
+    - model: Which AI created it (which chef)
+    - created_at: When it was generated (when cooked)
     
-    📝 DESIGN PATTERN: Properties
-    ------------------------------
-    The @property decorator creates a "computed attribute" - it looks like
-    a variable but actually runs code. This is cleaner than calling a method.
-    
-    Compare:
-    ❌ citation.get_length()  # Verbose, feels like a function call
-    ✅ citation.length         # Clean, feels like accessing data
+    📝 DESIGN DECISION: Optional Fields
+    -----------------------------------
+    Some fields are Optional because different models return different data:
+    - DALL-E 3 provides revised_prompt (improved version of your prompt)
+    - DALL-E 2 doesn't revise prompts, so revised_prompt might be None
     
     EXAMPLE USAGE:
-    >>> citation = Citation(
-    ...     url="https://python.org",
-    ...     title="Python Tutorial",
-    ...     start_index=100,
-    ...     end_index=250
+    >>> metadata = ImageMetadata(
+    ...     prompt="A cat wearing a astronaut helmet",
+    ...     revised_prompt="A fluffy orange cat wearing a white NASA astronaut helmet...",
+    ...     size="1024x1024",
+    ...     model="dall-e-3",
+    ...     created_at=datetime.now()
     ... )
-    >>> print(citation.length)  # Computes: 250 - 100 = 150
-    150
-    >>> print(citation)  # Uses __str__ method
-    [Python Tutorial](https://python.org)
+    >>> print(metadata.is_high_resolution)  # True
     """
     
-    # The full URL of the source
-    url: str
+    # The original prompt provided by the user
+    prompt: str
     
-    # Human-readable title of the page
-    title: str
+    # The revised prompt (DALL-E 3 may enhance your prompt for better results)
+    revised_prompt: Optional[str] = None
     
-    # Character position where citation starts in the response text
-    start_index: int
+    # Image dimensions (e.g., "1024x1024", "1792x1024")
+    size: str = "1024x1024"
     
-    # Character position where citation ends in the response text
-    end_index: int
+    # Model used for generation
+    model: str = "dall-e-3"
+    
+    # Quality setting used (if applicable)
+    quality: Optional[str] = None
+    
+    # Style setting used (if applicable)
+    style: Optional[str] = None
+    
+    # When the image was generated
+    created_at: datetime = None
+    
+    def __post_init__(self):
+        """Set created_at to current time if not provided."""
+        if self.created_at is None:
+            self.created_at = datetime.now()
     
     @property
-    def length(self) -> int:
+    def is_high_resolution(self) -> bool:
         """
-        Calculate the length of the cited text.
+        Check if this is a high-resolution image.
         
-        💡 WHY THIS MATTERS:
-        Longer citations = more thorough evidence
-        Shorter citations = quick facts
+        � PRACTICAL USE:
+        High-res images are better for:
+        - Printing
+        - Professional use
+        - Detail work
+        
+        But they also:
+        - Cost more to generate
+        - Take longer to load
+        - Use more storage
         """
-        return self.end_index - self.start_index
+        width, height = map(int, self.size.split('x'))
+        return width >= 1024 and height >= 1024
+    
+    @property
+    def aspect_ratio(self) -> str:
+        """
+        Get the aspect ratio as a simplified fraction.
+        
+        📝 EXAMPLE RATIOS:
+        - 1024x1024 → "1:1" (square)
+        - 1792x1024 → "16:9" (widescreen)
+        - 1024x1792 → "9:16" (portrait)
+        """
+        width, height = map(int, self.size.split('x'))
+        
+        def gcd(a, b):
+            while b:
+                a, b = b, a % b
+            return a
+        
+        divisor = gcd(width, height)
+        return f"{width//divisor}:{height//divisor}"
     
     def __str__(self) -> str:
-        """
-        String representation using Markdown link format.
-        
-        📝 CONCEPT: Dunder Methods
-        ---------------------------
-        Methods with double underscores (__str__, __init__, etc.) are "magic methods"
-        that Python calls automatically. __str__ is used when you print() something.
-        """
-        return f"[{self.title}]({self.url})"
+        """Format metadata for display."""
+        return f"{self.model} {self.size} - {self.prompt[:50]}..."
 
 
 # ============================================================================
-# BLUEPRINT 3: Source - The Websites We Consulted
+# BLUEPRINT 3: ImageResult - The Complete Generated Image Package
 # ============================================================================
 
 @dataclass
-class Source:
+class ImageResult:
     """
-    Represents a source consulted during web search.
-    
-    📚 CONCEPT: Bibliography vs Citations
-    --------------------------------------
-    While Citations tell us WHERE in the text info came from, Sources tell us
-    WHICH websites were consulted (even if not directly quoted).
-    
-    Think of it like writing a research paper:
-    - Bibliography: All books you looked at (Sources)
-    - Footnotes: Specific quotes from those books (Citations)
-    
-    🎯 OPENAI SPECIAL SOURCES:
-    ---------------------------
-    OpenAI has special data sources for real-time info:
-    - oai-sports: Live sports scores
-    - oai-weather: Current weather data
-    - oai-finance: Stock market data
-    - web: Regular internet websites
-    
-    EXAMPLE USAGE:
-    >>> # Regular website
-    >>> source1 = Source(url="https://wikipedia.org", type="web")
-    >>> print(source1.is_special)  # False
-    >>> 
-    >>> # Special OpenAI source
-    >>> source2 = Source(url="", type="oai-weather")
-    >>> print(source2.is_special)  # True
-    """
-    
-    # The URL of the source (empty string for special OpenAI sources)
-    url: str
-    
-    # Type of source: 'web', 'oai-sports', 'oai-weather', 'oai-finance', etc.
-    type: str
-    
-    @property
-    def is_special(self) -> bool:
-        """
-        Check if this is a special OpenAI data source.
-        
-        💡 PATTERN: Boolean Properties
-        -------------------------------
-        Properties that return True/False should start with "is_", "has_", or "can_"
-        This makes code read like English:
-        
-        ✅ if source.is_special:     # Reads naturally
-        ❌ if source.special():       # Less clear
-        """
-        return self.type.startswith("oai-")
-    
-    def __str__(self) -> str:
-        """Format source for display with type information."""
-        return f"{self.url} ({self.type})"
-
-
-# ============================================================================
-# BLUEPRINT 4: SearchResult - The Complete Answer Package
-# ============================================================================
-
-@dataclass
-class SearchResult:
-    """
-    Represents the complete result of a web search operation.
+    Represents the complete result of an image generation operation.
     
     📚 CONCEPT: Aggregation - Combining Multiple Data Types
     --------------------------------------------------------
-    This is where everything comes together! A SearchResult is like a gift box
+    This is where everything comes together! An ImageResult is like a gift box
     that contains multiple items:
-    - The answer text (what you asked for)
-    - Citations (proof for claims)
-    - Sources (websites consulted)
-    - Metadata (tracking information)
+    - The image data (what you asked for)
+    - Metadata (information about the generation)
+    - File information (for saving/loading)
     
     🎯 REAL-WORLD ANALOGY:
     ----------------------
-    Imagine asking a librarian a question. They return:
-    - query: Your original question (so you remember what you asked)
-    - text: Their answer in paragraph form
-    - citations: Footnotes showing which book each fact came from
-    - sources: List of all books they looked at
-    - search_id: Transaction number (for tracking)
-    - timestamp: When you asked (for your records)
+    Imagine commissioning an artist to paint something. They return:
+    - prompt: Your original request (so you remember what you asked)
+    - image_url: Where to view the finished artwork
+    - image_data: The actual image bytes (if downloaded)
+    - metadata: Details about how it was created
+    - file_path: Where it's saved on your computer
+    - generation_id: Commission number (for tracking)
     
-    📝 DESIGN: Why Lists?
-    ---------------------
-    citations and sources are Lists because:
-    - One answer might need multiple sources (scholarly rigor)
-    - Order matters (primary sources first)
-    - Empty list [] is valid (AI gave answer from training data)
+    📝 DESIGN: Why Optional Fields?
+    -------------------------------
+    Different scenarios need different data:
+    - Online viewing: Only need image_url
+    - Offline storage: Need image_data and file_path
+    - API integration: Need generation_id for tracking
     
     EXAMPLE USAGE:
-    >>> result = SearchResult(
-    ...     query="What is Python?",
-    ...     text="Python is a high-level programming language...",
-    ...     citations=[citation1, citation2],
-    ...     sources=[source1, source2, source3],
-    ...     search_id="abc-123",
-    ...     timestamp=datetime.now()
+    >>> result = ImageResult(
+    ...     prompt="A space cat",
+    ...     image_url="https://oaidalleapi...",
+    ...     metadata=ImageMetadata(...),
+    ...     generation_id="gen-123"
     ... )
     >>> 
-    >>> # Check if answer is backed by sources
-    >>> if result.has_citations:
-    ...     print(f"Answer backed by {len(result.citations)} sources")
+    >>> # Check if image is saved locally
+    >>> if result.is_downloaded:
+    ...     print(f"Image saved to: {result.file_path}")
     """
     
-    # The original search query from the user
-    query: str
+    # The original prompt from the user
+    prompt: str
     
-    # The AI's answer text (may contain citation markers like [1], [2])
-    text: str
+    # URL to the generated image (from OpenAI)
+    image_url: Optional[str] = None
     
-    # List of all citations supporting claims in the text
-    citations: List[Citation]
+    # Binary image data (when downloaded)
+    image_data: Optional[bytes] = None
     
-    # List of all sources consulted (broader than citations)
-    sources: List[Source]
+    # Metadata about the image generation
+    metadata: Optional[ImageMetadata] = None
     
-    # Unique identifier for this search (for logging/debugging)
-    search_id: str
+    # Local file path (when saved to disk)
+    file_path: Optional[str] = None
     
-    # When this search was performed (for caching/expiry)
-    timestamp: datetime
+    # Unique identifier for this generation (for logging/debugging)
+    generation_id: str = ""
+    
+    # When this generation was completed
+    timestamp: datetime = None
+    
+    def __post_init__(self):
+        """Set timestamp to current time if not provided."""
+        if self.timestamp is None:
+            self.timestamp = datetime.now()
     
     @property
-    def has_citations(self) -> bool:
+    def is_downloaded(self) -> bool:
         """
-        Check if the result has any citations.
+        Check if the image has been downloaded.
         
         💡 WHY CHECK THIS?
         ------------------
-        Results without citations might be:
-        - From the AI's training data (pre-October 2023)
-        - General knowledge that doesn't need sources
-        - A sign something went wrong (no sources found)
-        
-        You can use this to add warnings in your UI:
-        "⚠️ This answer doesn't cite any sources"
+        URLs from OpenAI expire after a few hours, so you might want to:
+        - Download immediately for long-term storage
+        - Check if download is needed before displaying
+        - Warn users about expiring links
         """
-        return len(self.citations) > 0
+        return self.image_data is not None
+    
+    @property
+    def is_saved(self) -> bool:
+        """Check if the image has been saved to a file."""
+        return self.file_path is not None
+    
+    @property
+    def file_size(self) -> Optional[int]:
+        """Get the size of the image data in bytes."""
+        return len(self.image_data) if self.image_data else None
     
     def __str__(self) -> str:
         """
@@ -310,22 +296,28 @@ class SearchResult:
         
         📝 DESIGN: Why Not Print Everything?
         ------------------------------------
-        We only show query and citation count because:
+        We only show prompt and basic status because:
         - Logs should be scannable (not walls of text)
         - You can always access full data via attributes
         - This appears in error messages and debug logs
         """
-        return f"SearchResult(query='{self.query}', citations={len(self.citations)})"
+        status = []
+        if self.is_downloaded:
+            status.append("downloaded")
+        if self.is_saved:
+            status.append("saved")
+        status_str = f" ({', '.join(status)})" if status else ""
+        return f"ImageResult(prompt='{self.prompt[:30]}...'{status_str})"
 
 
 # ============================================================================
-# BLUEPRINT 5: SearchError - When Things Go Wrong
+# BLUEPRINT 4: ImageError - When Things Go Wrong
 # ============================================================================
 
 @dataclass
-class SearchError(Exception):
+class ImageError(Exception):
     """
-    Custom exception for search-related errors.
+    Custom exception for image generation-related errors.
     
     📚 CONCEPT: Exception Hierarchies
     ---------------------------------
@@ -344,8 +336,8 @@ class SearchError(Exception):
     - Can't handle different errors differently
     
     ✅ GOOD: Custom exception
-    raise SearchError(code="AUTHENTICATION_ERROR", message="Invalid API key")
-    - Can catch SearchError specifically
+    raise ImageError(code="AUTHENTICATION_ERROR", message="Invalid API key")
+    - Can catch ImageError specifically
     - Machine-readable error codes
     - Can include debug details
     
@@ -354,14 +346,17 @@ class SearchError(Exception):
     - AUTHENTICATION_ERROR: Invalid API key
     - RATE_LIMIT_ERROR: Too many requests
     - API_ERROR: OpenAI service problems
-    - VALIDATION_ERROR: Invalid input data
-    - PARSING_ERROR: Couldn't understand API response
+    - VALIDATION_ERROR: Invalid input data (bad prompt, size, etc.)
+    - CONTENT_POLICY_ERROR: Prompt violates OpenAI's usage policies
+    - GENERATION_ERROR: Image generation failed
+    - DOWNLOAD_ERROR: Failed to download generated image
+    - SAVE_ERROR: Failed to save image to file
     - UNKNOWN_ERROR: Unexpected issues
     
     EXAMPLE USAGE:
     >>> # Raising an error with context
     >>> if not api_key:
-    ...     raise SearchError(
+    ...     raise ImageError(
     ...         code="AUTHENTICATION_ERROR",
     ...         message="API key is required",
     ...         details={"hint": "Set OPENAI_API_KEY environment variable"}
@@ -369,12 +364,12 @@ class SearchError(Exception):
     >>> 
     >>> # Catching and handling
     >>> try:
-    ...     result = search("Python")
-    ... except SearchError as e:
+    ...     result = generate_image("A space cat")
+    ... except ImageError as e:
     ...     if e.code == "RATE_LIMIT_ERROR":
     ...         print("Slow down! Try again in 60 seconds")
-    ...     elif e.code == "AUTHENTICATION_ERROR":
-    ...         print("Check your API key")
+    ...     elif e.code == "CONTENT_POLICY_ERROR":
+    ...         print("Try a different prompt - this one violates content policy")
     ...     else:
     ...         print(f"Error: {e}")
     """
@@ -395,10 +390,10 @@ class SearchError(Exception):
         💡 PATTERN: Structured Error Messages
         --------------------------------------
         Format: [CODE] Message
-        Example: [RATE_LIMIT_ERROR] Too many requests
+        Example: [CONTENT_POLICY_ERROR] Prompt violates usage policies
         
         This makes logs searchable:
-        $ grep "RATE_LIMIT_ERROR" logs.txt
+        $ grep "CONTENT_POLICY_ERROR" logs.txt
         """
         error_str = f"[{self.code}] {self.message}"
         if self.details:
