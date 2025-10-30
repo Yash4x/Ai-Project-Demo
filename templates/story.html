@@ -1,0 +1,378 @@
+{% extends "base.html" %}
+
+{% block title %}Generate Visual Story - AI ImageGen{% endblock %}
+
+{% block content %}
+<div class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
+    <!-- Header -->
+    <div class="text-center mb-12">
+        <h1 class="text-4xl lg:text-5xl font-bold text-gray-900 mb-4">
+            <i class="fas fa-book text-purple-500 mr-4"></i>
+            Create Visual Story
+        </h1>
+        <p class="text-xl text-gray-600 max-w-3xl mx-auto">
+            Transform your narrative into a sequence of connected images. Create compelling visual stories that bring your ideas to life.
+        </p>
+    </div>
+
+    <!-- Generation Form -->
+    <div class="bg-white rounded-2xl shadow-xl p-8 mb-8 border border-gray-100">
+        <form id="storyForm" class="space-y-6">
+            <!-- Story Prompt -->
+            <div>
+                <label for="prompt" class="block text-lg font-semibold text-gray-900 mb-3">
+                    <i class="fas fa-feather text-purple-500 mr-2"></i>
+                    Story Concept
+                </label>
+                <textarea 
+                    id="prompt" 
+                    name="prompt" 
+                    rows="4" 
+                    class="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-purple-500 focus:border-purple-500 resize-none text-gray-900 placeholder-gray-500"
+                    placeholder="Describe the story you want to visualize... What happens? Who are the characters? What's the setting? For example: 'A brave astronaut discovers a mysterious alien artifact on Mars, leading to an epic space adventure'"
+                    required
+                ></textarea>
+                <div class="mt-2 flex items-center text-sm text-gray-500">
+                    <i class="fas fa-lightbulb text-yellow-500 mr-2"></i>
+                    Tip: Include main characters, setting, and key plot points for the best story sequence
+                </div>
+            </div>
+
+            <!-- Advanced Options -->
+            <div class="grid md:grid-cols-4 gap-4">
+                <div>
+                    <label for="num_scenes" class="block text-sm font-medium text-gray-700 mb-2">Number of Scenes</label>
+                    <select id="num_scenes" name="num_scenes" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500">
+                        <option value="3">3 Scenes (Quick)</option>
+                        <option value="5" selected>5 Scenes (Standard)</option>
+                        <option value="7">7 Scenes (Detailed)</option>
+                    </select>
+                </div>
+                <div>
+                    <label for="image_size" class="block text-sm font-medium text-gray-700 mb-2">Image Size</label>
+                    <select id="image_size" name="image_size" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500">
+                        <option value="1024x1024">Square (1024×1024)</option>
+                        <option value="1024x1792">Portrait (1024×1792)</option>
+                        <option value="1792x1024">Landscape (1792×1024)</option>
+                    </select>
+                </div>
+                <div>
+                    <label for="image_quality" class="block text-sm font-medium text-gray-700 mb-2">Quality</label>
+                    <select id="image_quality" name="image_quality" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500">
+                        <option value="standard">Standard</option>
+                        <option value="hd">HD (Higher Cost)</option>
+                    </select>
+                </div>
+                <div>
+                    <label for="image_style" class="block text-sm font-medium text-gray-700 mb-2">Style</label>
+                    <select id="image_style" name="image_style" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500">
+                        <option value="vivid">Vivid (Colorful)</option>
+                        <option value="natural">Natural (Realistic)</option>
+                    </select>
+                </div>
+            </div>
+
+            <!-- Generate Button -->
+            <div class="text-center">
+                <button type="submit" id="generateBtn" class="bg-purple-500 hover:bg-purple-600 text-white font-semibold py-4 px-8 rounded-xl text-lg transform hover:scale-105 transition-all duration-200 shadow-lg">
+                    <i class="fas fa-book-open mr-3"></i>
+                    Generate Story
+                </button>
+            </div>
+        </form>
+    </div>
+
+    <!-- Loading Indicator -->
+    <div id="loadingIndicator" class="hidden">
+        <div class="bg-white rounded-2xl shadow-xl p-8 text-center">
+            <div class="flex flex-col items-center">
+                <div class="w-16 h-16 border-4 border-purple-200 border-t-purple-500 rounded-full animate-spin mb-4"></div>
+                <h3 class="text-2xl font-semibold text-gray-900 mb-2">Creating your visual story...</h3>
+                <p class="text-gray-600 mb-4">This may take 2-5 minutes depending on the number of scenes</p>
+                <div class="w-full max-w-lg bg-gray-200 rounded-full h-3 mb-4">
+                    <div class="bg-purple-500 h-3 rounded-full transition-all duration-1000" id="progressBar" style="width: 0%"></div>
+                </div>
+                <p id="progressText" class="text-sm text-gray-500">Decomposing story into scenes...</p>
+            </div>
+        </div>
+    </div>
+
+    <!-- Results Section -->
+    <div id="resultsSection" class="hidden">
+        <div class="bg-white rounded-2xl shadow-xl overflow-hidden">
+            <div class="bg-purple-500 text-white p-6">
+                <div class="flex items-center justify-between">
+                    <h3 class="text-2xl font-semibold flex items-center">
+                        <i class="fas fa-check-circle mr-3"></i>
+                        Story Generated Successfully!
+                    </h3>
+                    <span id="successRate" class="bg-white bg-opacity-20 px-3 py-1 rounded-full text-sm font-medium"></span>
+                </div>
+            </div>
+            
+            <!-- Story Stats -->
+            <div class="p-6 bg-gray-50 border-b">
+                <div class="grid md:grid-cols-4 gap-6 text-center">
+                    <div class="bg-white p-4 rounded-xl shadow-sm">
+                        <div class="text-2xl font-bold text-purple-600" id="totalScenes">0</div>
+                        <div class="text-sm text-gray-600">Total Scenes</div>
+                    </div>
+                    <div class="bg-white p-4 rounded-xl shadow-sm">
+                        <div class="text-2xl font-bold text-green-600" id="successfulScenes">0</div>
+                        <div class="text-sm text-gray-600">Successful</div>
+                    </div>
+                    <div class="bg-white p-4 rounded-xl shadow-sm">
+                        <div class="text-2xl font-bold text-blue-600" id="totalTime">0s</div>
+                        <div class="text-sm text-gray-600">Total Time</div>
+                    </div>
+                    <div class="bg-white p-4 rounded-xl shadow-sm">
+                        <div class="text-lg font-semibold text-gray-700" id="storyFolder">story_X</div>
+                        <div class="text-sm text-gray-600">Folder</div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Story Scenes -->
+            <div class="p-8">
+                <h4 class="text-xl font-semibold text-gray-900 mb-6">Your Visual Story</h4>
+                <div id="storyScenes" class="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
+                    <!-- Scenes will be populated here -->
+                </div>
+                
+                <!-- Action Buttons -->
+                <div class="flex flex-col sm:flex-row gap-4 justify-center mt-8">
+                    <button onclick="resetForm()" class="bg-gray-500 hover:bg-gray-600 text-white font-semibold py-3 px-6 rounded-lg transition-colors">
+                        <i class="fas fa-redo mr-2"></i>Generate Another Story
+                    </button>
+                    <button id="downloadAllBtn" class="bg-blue-500 hover:bg-blue-600 text-white font-semibold py-3 px-6 rounded-lg transition-colors">
+                        <i class="fas fa-download mr-2"></i>Download All Images
+                    </button>
+                    <button onclick="shareStory()" class="bg-green-500 hover:bg-green-600 text-white font-semibold py-3 px-6 rounded-lg transition-colors">
+                        <i class="fas fa-share mr-2"></i>Share Story
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Error Section -->
+    <div id="errorSection" class="hidden">
+        <div class="bg-red-50 border border-red-200 rounded-2xl p-6">
+            <div class="flex items-start">
+                <i class="fas fa-exclamation-triangle text-red-500 text-xl mr-3 mt-1"></i>
+                <div>
+                    <h3 class="text-lg font-semibold text-red-800 mb-2">Story Generation Failed</h3>
+                    <p id="errorMessage" class="text-red-700"></p>
+                    <button onclick="resetForm()" class="mt-4 bg-red-500 hover:bg-red-600 text-white font-semibold py-2 px-4 rounded-lg transition-colors">
+                        Try Again
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+let currentStoryData = null;
+
+document.getElementById('storyForm').addEventListener('submit', async function(e) {
+    e.preventDefault();
+    
+    // Get form data
+    const formData = new FormData(this);
+    const data = {
+        prompt: formData.get('prompt'),
+        num_scenes: parseInt(formData.get('num_scenes')),
+        image_size: formData.get('image_size'),
+        image_quality: formData.get('image_quality'),
+        image_style: formData.get('image_style')
+    };
+    
+    // Show loading
+    showLoading(data.num_scenes);
+    
+    try {
+        const response = await fetch('/api/generate-story', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify(data)
+        });
+        
+        const result = await response.json();
+        
+        if (result.success) {
+            currentStoryData = result;
+            showResults(result);
+        } else {
+            showError(result.error || 'Unknown error occurred');
+        }
+    } catch (error) {
+        console.error('Error:', error);
+        showError('Network error: ' + error.message);
+    }
+});
+
+function showLoading(numScenes) {
+    document.getElementById('loadingIndicator').classList.remove('hidden');
+    document.getElementById('resultsSection').classList.add('hidden');
+    document.getElementById('errorSection').classList.add('hidden');
+    document.getElementById('generateBtn').disabled = true;
+    
+    // Progress simulation
+    const progressSteps = [
+        'Decomposing story into scenes...',
+        'Generating scene 1...',
+        'Generating scene 2...',
+        'Generating scene 3...',
+        'Generating scene 4...',
+        'Generating scene 5...',
+        'Finalizing story...'
+    ];
+    
+    let stepIndex = 0;
+    let progress = 0;
+    const progressBar = document.getElementById('progressBar');
+    const progressText = document.getElementById('progressText');
+    
+    const progressInterval = setInterval(() => {
+        if (stepIndex < Math.min(progressSteps.length, numScenes + 2)) {
+            progressText.textContent = progressSteps[stepIndex];
+            progress = ((stepIndex + 1) / (numScenes + 2)) * 100;
+            progressBar.style.width = progress + '%';
+            stepIndex++;
+        } else {
+            clearInterval(progressInterval);
+        }
+    }, 3000);
+    
+    // Store interval for cleanup
+    window.currentProgressInterval = progressInterval;
+}
+
+function showResults(result) {
+    // Clear any running intervals
+    if (window.currentProgressInterval) {
+        clearInterval(window.currentProgressInterval);
+    }
+    
+    // Debug: Log the result to console
+    console.log('Story result:', result);
+    
+    document.getElementById('loadingIndicator').classList.add('hidden');
+    document.getElementById('generateBtn').disabled = false;
+    
+    // Populate stats
+    document.getElementById('totalScenes').textContent = result.total_scenes;
+    document.getElementById('successfulScenes').textContent = result.successful_scenes;
+    document.getElementById('totalTime').textContent = result.total_generation_time + 's';
+    document.getElementById('storyFolder').textContent = result.story_folder;
+    document.getElementById('successRate').textContent = result.success_rate + '% Success';
+    
+    // Populate scenes
+    const scenesContainer = document.getElementById('storyScenes');
+    scenesContainer.innerHTML = '';
+    
+    result.scenes.forEach((scene, index) => {
+        const sceneElement = createSceneElement(scene, index + 1);
+        scenesContainer.appendChild(sceneElement);
+    });
+    
+    document.getElementById('resultsSection').classList.remove('hidden');
+}
+
+function createSceneElement(scene, sceneNumber) {
+    // Debug: Log scene data
+    console.log(`Scene ${sceneNumber}:`, scene);
+    
+    const sceneDiv = document.createElement('div');
+    sceneDiv.className = 'bg-gray-50 rounded-xl overflow-hidden shadow-sm hover:shadow-md transition-shadow';
+    
+    sceneDiv.innerHTML = `
+        <div class="bg-purple-500 text-white p-3 text-center">
+            <h5 class="font-semibold">Scene ${sceneNumber}</h5>
+        </div>
+        <div class="p-4">
+            <img src="${scene.web_path}" alt="Scene ${sceneNumber}" class="w-full h-48 object-cover rounded-lg mb-3">
+            <p class="text-sm text-gray-600 mb-3 line-clamp-3">${scene.description}</p>
+            <div class="flex gap-2">
+                <button onclick="downloadImage('${scene.web_path}', 'scene-${sceneNumber}.png')" class="flex-1 bg-blue-500 hover:bg-blue-600 text-white text-xs py-2 px-3 rounded transition-colors">
+                    <i class="fas fa-download mr-1"></i>Download
+                </button>
+                <button onclick="viewImageFullscreen('${scene.web_path}')" class="flex-1 bg-gray-500 hover:bg-gray-600 text-white text-xs py-2 px-3 rounded transition-colors">
+                    <i class="fas fa-search-plus mr-1"></i>View
+                </button>
+            </div>
+        </div>
+    `;
+    
+    return sceneDiv;
+}
+
+function showError(message) {
+    if (window.currentProgressInterval) {
+        clearInterval(window.currentProgressInterval);
+    }
+    
+    document.getElementById('loadingIndicator').classList.add('hidden');
+    document.getElementById('generateBtn').disabled = false;
+    document.getElementById('errorMessage').textContent = message;
+    document.getElementById('errorSection').classList.remove('hidden');
+}
+
+function resetForm() {
+    document.getElementById('storyForm').reset();
+    document.getElementById('resultsSection').classList.add('hidden');
+    document.getElementById('errorSection').classList.add('hidden');
+    document.getElementById('loadingIndicator').classList.add('hidden');
+    currentStoryData = null;
+}
+
+function downloadImage(url, filename) {
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = filename;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+}
+
+function viewImageFullscreen(url) {
+    window.open(url, '_blank');
+}
+
+function shareStory() {
+    if (currentStoryData) {
+        const storyUrl = window.location.href;
+        const shareText = `Check out this amazing visual story I created with AI! ${currentStoryData.scenes.length} scenes telling an incredible narrative.`;
+        
+        if (navigator.share) {
+            navigator.share({
+                title: 'My AI-Generated Visual Story',
+                text: shareText,
+                url: storyUrl
+            });
+        } else {
+            // Fallback to clipboard
+            navigator.clipboard.writeText(`${shareText} ${storyUrl}`).then(() => {
+                alert('Story link copied to clipboard!');
+            });
+        }
+    }
+}
+
+// Download all images functionality
+document.getElementById('downloadAllBtn').addEventListener('click', function() {
+    if (currentStoryData && currentStoryData.scenes) {
+        currentStoryData.scenes.forEach((scene, index) => {
+            setTimeout(() => {
+                downloadImage(scene.web_path, `scene-${index + 1}.png`);
+            }, index * 500); // Stagger downloads
+        });
+    }
+});
+</script>
+{% endblock %}
