@@ -72,6 +72,43 @@
                 </div>
             </div>
 
+            <!-- Narration Options -->
+            <div class="border-t border-gray-200 pt-6">
+                <div class="flex items-center mb-4">
+                    <input type="checkbox" id="enable_narration" name="enable_narration" class="w-4 h-4 text-purple-600 bg-gray-100 border-gray-300 rounded focus:ring-purple-500 focus:ring-2">
+                    <label for="enable_narration" class="ml-2 text-lg font-semibold text-gray-900">
+                        <i class="fas fa-microphone text-purple-500 mr-2"></i>
+                        Enable AI Narration
+                    </label>
+                </div>
+                <div id="narrationOptions" class="grid md:grid-cols-2 gap-4 hidden">
+                    <div>
+                        <label for="voice" class="block text-sm font-medium text-gray-700 mb-2">Narrator Voice</label>
+                        <select id="voice" name="voice" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500">
+                            <option value="alloy">Alloy (Balanced)</option>
+                            <option value="echo">Echo (Male)</option>
+                            <option value="fable" selected>Fable (Storytelling)</option>
+                            <option value="onyx">Onyx (Deep Male)</option>
+                            <option value="nova">Nova (Young Female)</option>
+                            <option value="shimmer">Shimmer (Soft Female)</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label for="narration_speed" class="block text-sm font-medium text-gray-700 mb-2">Speech Speed</label>
+                        <select id="narration_speed" name="narration_speed" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500">
+                            <option value="0.75">Slow (0.75x)</option>
+                            <option value="1.0" selected>Normal (1.0x)</option>
+                            <option value="1.25">Fast (1.25x)</option>
+                            <option value="1.5">Very Fast (1.5x)</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="mt-2 text-sm text-gray-500">
+                    <i class="fas fa-info-circle text-blue-500 mr-2"></i>
+                    AI narration adds immersive audio storytelling to each scene (additional processing time)
+                </div>
+            </div>
+
             <!-- Generate Button -->
             <div class="text-center">
                 <button type="submit" id="generateBtn" class="bg-purple-500 hover:bg-purple-600 text-white font-semibold py-4 px-8 rounded-xl text-lg transform hover:scale-105 transition-all duration-200 shadow-lg">
@@ -147,6 +184,9 @@
                     <button id="downloadAllBtn" class="bg-blue-500 hover:bg-blue-600 text-white font-semibold py-3 px-6 rounded-lg transition-colors">
                         <i class="fas fa-download mr-2"></i>Download All Images
                     </button>
+                    <button onclick="playFullStoryNarration()" id="playStoryBtn" class="bg-purple-500 hover:bg-purple-600 text-white font-semibold py-3 px-6 rounded-lg transition-colors hidden">
+                        <i class="fas fa-play mr-2"></i>Play Full Story
+                    </button>
                     <button onclick="shareStory()" class="bg-green-500 hover:bg-green-600 text-white font-semibold py-3 px-6 rounded-lg transition-colors">
                         <i class="fas fa-share mr-2"></i>Share Story
                     </button>
@@ -187,7 +227,10 @@ document.getElementById('storyForm').addEventListener('submit', async function(e
         num_scenes: parseInt(formData.get('num_scenes')),
         image_size: formData.get('image_size'),
         image_quality: formData.get('image_quality'),
-        image_style: formData.get('image_style')
+        image_style: formData.get('image_style'),
+        enable_narration: document.getElementById('enable_narration').checked,
+        voice: formData.get('voice'),
+        narration_speed: parseFloat(formData.get('narration_speed'))
     };
     
     // Show loading
@@ -281,6 +324,15 @@ function showResults(result) {
         scenesContainer.appendChild(sceneElement);
     });
     
+    // Show "Play Full Story" button if any scenes have audio
+    const hasAudio = result.scenes.some(scene => scene.has_audio && scene.audio_url);
+    const playStoryBtn = document.getElementById('playStoryBtn');
+    if (hasAudio) {
+        playStoryBtn.classList.remove('hidden');
+    } else {
+        playStoryBtn.classList.add('hidden');
+    }
+    
     document.getElementById('resultsSection').classList.remove('hidden');
 }
 
@@ -298,6 +350,22 @@ function createSceneElement(scene, sceneNumber) {
         <div class="p-4">
             <img src="${scene.web_path}" alt="Scene ${sceneNumber}" class="w-full h-48 object-cover rounded-lg mb-3">
             <p class="text-sm text-gray-600 mb-3 line-clamp-3">${scene.description}</p>
+            ${scene.has_audio && scene.audio_url ? `
+                <div class="mb-3 p-2 bg-green-50 rounded-lg border border-green-200">
+                    <div class="flex items-center justify-between mb-2">
+                        <span class="text-xs font-medium text-green-700">
+                            <i class="fas fa-volume-up mr-1"></i>AI Narration
+                        </span>
+                        <button onclick="playSceneAudio('${scene.audio_url}')" class="text-green-600 hover:text-green-800">
+                            <i class="fas fa-play text-sm"></i>
+                        </button>
+                    </div>
+                    <audio controls class="w-full h-8" style="height: 30px;">
+                        <source src="${scene.audio_url}" type="audio/mpeg">
+                        Your browser does not support the audio element.
+                    </audio>
+                </div>
+            ` : ''}
             <div class="flex gap-2">
                 <button onclick="downloadImage('${scene.web_path}', 'scene-${sceneNumber}.png')" class="flex-1 bg-blue-500 hover:bg-blue-600 text-white text-xs py-2 px-3 rounded transition-colors">
                     <i class="fas fa-download mr-1"></i>Download
@@ -372,6 +440,52 @@ document.getElementById('downloadAllBtn').addEventListener('click', function() {
                 downloadImage(scene.web_path, `scene-${index + 1}.png`);
             }, index * 500); // Stagger downloads
         });
+    }
+});
+
+// Narration functions
+function playSceneAudio(audioUrl) {
+    const audio = new Audio(audioUrl);
+    audio.play().catch(error => {
+        console.error('Error playing audio:', error);
+        alert('Unable to play audio. Please try downloading the file.');
+    });
+}
+
+function playFullStoryNarration() {
+    if (currentStoryData && currentStoryData.scenes) {
+        const audioScenes = currentStoryData.scenes.filter(scene => scene.has_audio && scene.audio_url);
+        if (audioScenes.length === 0) {
+            alert('No audio narration available for this story.');
+            return;
+        }
+        
+        let currentIndex = 0;
+        function playNext() {
+            if (currentIndex < audioScenes.length) {
+                const audio = new Audio(audioScenes[currentIndex].audio_url);
+                audio.onended = () => {
+                    currentIndex++;
+                    playNext();
+                };
+                audio.play().catch(error => {
+                    console.error('Error playing audio:', error);
+                    currentIndex++;
+                    playNext();
+                });
+            }
+        }
+        playNext();
+    }
+}
+
+// Toggle narration options visibility
+document.getElementById('enable_narration').addEventListener('change', function() {
+    const options = document.getElementById('narrationOptions');
+    if (this.checked) {
+        options.classList.remove('hidden');
+    } else {
+        options.classList.add('hidden');
     }
 });
 </script>

@@ -504,6 +504,31 @@ class ImageGenerationService:
                     
                     print(f"✅ Scene {i} generated successfully")
                     
+                    # Step 2.5: Generate audio narration if enabled
+                    if story_options.enable_narration:
+                        try:
+                            print(f"🎙️  Generating narration for scene {i}...")
+                            audio_data = self.client.generate_scene_narration(
+                                scene,
+                                voice=story_options.voice,
+                                speed=story_options.narration_speed
+                            )
+                            
+                            # Save audio file if auto_save is enabled
+                            if story_options.auto_save and story_folder:
+                                audio_filename = f"scene_{i}_narration.mp3"
+                                audio_path = os.path.join(story_folder, audio_filename)
+                                
+                                with open(audio_path, 'wb') as audio_file:
+                                    audio_file.write(audio_data)
+                                
+                                scene.audio_file_path = audio_path
+                                print(f"🔊 Scene {i} narration saved to: {audio_path}")
+                            
+                        except Exception as e:
+                            print(f"⚠️  Scene {i} narration failed: {str(e)}")
+                            # Continue without audio - don't fail the whole story
+                    
                 except Exception as e:
                     print(f"❌ Scene {i} failed: {str(e)}")
                     # Continue with other scenes even if one fails

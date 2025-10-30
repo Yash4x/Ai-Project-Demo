@@ -143,7 +143,10 @@ def api_generate_story():
             num_scenes=int(data.get('num_scenes', 5)),
             size=data.get('image_size', '1024x1024'),
             quality=data.get('image_quality', 'standard'),
-            style=data.get('image_style', 'vivid')
+            style=data.get('image_style', 'vivid'),
+            enable_narration=bool(data.get('enable_narration', False)),
+            voice=data.get('voice', 'alloy'),
+            narration_speed=float(data.get('narration_speed', 1.0))
         )
         
         logger.info(f"Generating story for prompt: {prompt}")
@@ -167,11 +170,20 @@ def api_generate_story():
                     scene.image_result.file_path, 
                     story_folder_name
                 )
+                # Create audio URL if audio file exists
+                audio_url = None
+                if scene.audio_file_path and os.path.exists(scene.audio_file_path):
+                    # Convert absolute path to relative URL
+                    audio_relative_path = os.path.relpath(scene.audio_file_path, 'generated_images')
+                    audio_url = f"/audio/{audio_relative_path}"
+                
                 web_scenes.append({
                     'scene_number': scene.scene_number,
                     'description': scene.narrative,  # Use narrative instead of description
                     'web_path': web_path,
                     'file_path': scene.image_result.file_path,
+                    'audio_url': audio_url,
+                    'has_audio': scene.has_audio,
                     'revised_prompt': scene.image_result.metadata.revised_prompt if scene.image_result.metadata else None,
                     'generation_time': 0  # Story generation timing is tracked at story level
                 })
@@ -239,6 +251,12 @@ def serve_generated_image(filename):
     return send_from_directory('generated_images', filename)
 
 
+@app.route('/audio/<path:filename>')
+def serve_audio(filename):
+    """Serve audio files from generated_images directory."""
+    return send_from_directory('generated_images', filename)
+
+
 def _copy_to_web_accessible(source_path: str, folder_name: str) -> str:
     """Copy generated image to web-accessible location."""
     if not os.path.exists(source_path):
@@ -265,17 +283,43 @@ def _get_story_info(story_path: str) -> Optional[Dict]:
     try:
         story_name = os.path.basename(story_path)
         scenes = []
+        audio_files = {}
         
-        # Get all image files in the story folder
+        # First pass: collect all audio files by scene number
+        for file in os.listdir(story_path):
+            if file.endswith('.mp3') and 'narration' in file:
+                # Extract scene number from filename like "scene_1_narration.mp3"
+                parts = file.split('_')
+                if len(parts) >= 2 and parts[0] == 'scene':
+                    try:
+                        scene_num = int(parts[1])
+                        audio_files[scene_num] = {
+                            'filename': file,
+                            'path': os.path.join(story_path, file),
+                            'url': f"/audio/{story_name}/{file}"
+                        }
+                    except (ValueError, IndexError):
+                        continue
+        
+        # Second pass: get all image files and match with audio
         for file in os.listdir(story_path):
             if file.endswith(('.png', '.jpg', '.jpeg', '.webp')):
                 file_path = os.path.join(story_path, file)
-                scenes.append({
+                
+                # Try to determine scene number from image filename
+                scene_number = len(scenes) + 1  # Default scene numbering
+                
+                scene_data = {
                     'filename': file,
                     'path': file_path,
                     'size': os.path.getsize(file_path),
-                    'modified': datetime.fromtimestamp(os.path.getmtime(file_path)).isoformat()
-                })
+                    'modified': datetime.fromtimestamp(os.path.getmtime(file_path)).isoformat(),
+                    'scene_number': scene_number,
+                    'has_audio': scene_number in audio_files,
+                    'audio_url': audio_files.get(scene_number, {}).get('url'),
+                    'audio_filename': audio_files.get(scene_number, {}).get('filename')
+                }
+                scenes.append(scene_data)
         
         if not scenes:
             return None
@@ -283,12 +327,17 @@ def _get_story_info(story_path: str) -> Optional[Dict]:
         # Sort scenes by filename (should be in order)
         scenes.sort(key=lambda x: x['filename'])
         
+        # Count total audio files
+        total_audio_files = len(audio_files)
+        
         return {
             'type': 'story',
             'name': story_name,
             'path': story_path,
             'scene_count': len(scenes),
             'scenes': scenes,
+            'has_narration': total_audio_files > 0,
+            'audio_count': total_audio_files,
             'created_at': min(scene['modified'] for scene in scenes),
             'size': sum(scene['size'] for scene in scenes)
         }

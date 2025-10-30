@@ -415,3 +415,73 @@ Output format: Return a JSON array with {story_options.num_scenes} objects, each
                 "STORY_DECOMPOSITION_ERROR",
                 f"Failed to decompose story: {str(e)}"
             )
+
+    def generate_scene_narration(self, scene: StoryScene, voice: str = "alloy", speed: float = 1.0) -> bytes:
+        """
+        Generate audio narration for a story scene using OpenAI's text-to-speech API.
+        
+        📚 CONCEPT: Text-to-Speech (TTS)
+        --------------------------------
+        We use OpenAI's TTS API to convert the scene narrative into spoken audio.
+        This creates immersive storytelling where users can both see and hear the story.
+        
+        VOICE OPTIONS:
+        - alloy: Balanced, neutral voice
+        - echo: Male voice
+        - fable: British accent, storytelling
+        - onyx: Deep male voice  
+        - nova: Young female voice
+        - shimmer: Soft female voice
+        
+        Args:
+            scene: StoryScene object with narrative text
+            voice: Voice model to use for narration
+            speed: Speed of speech (0.25 to 4.0)
+            
+        Returns:
+            bytes: MP3 audio data
+            
+        Raises:
+            ImageError: If TTS generation fails
+        """
+        try:
+            print(f"🎙️  Generating narration for scene {scene.scene_number}...")
+            
+            # Create a more engaging narrative for TTS
+            # Add scene introduction and smooth transitions
+            if scene.scene_number == 1:
+                narration_text = f"Scene {scene.scene_number}. {scene.narrative}"
+            else:
+                narration_text = f"In scene {scene.scene_number}, {scene.narrative}"
+            
+            # Call OpenAI's TTS API
+            response = self.client.audio.speech.create(
+                model="tts-1",  # OpenAI's TTS model
+                voice=voice,
+                input=narration_text,
+                speed=speed
+            )
+            
+            print(f"✅ Scene {scene.scene_number} narration generated")
+            return response.content
+            
+        except AuthenticationError:
+            raise ImageError(
+                "AUTHENTICATION_ERROR", 
+                "Invalid OpenAI API key for text-to-speech"
+            )
+        except RateLimitError as e:
+            raise ImageError(
+                "RATE_LIMIT_ERROR", 
+                f"OpenAI TTS rate limit exceeded: {str(e)}"
+            )
+        except APIError as e:
+            raise ImageError(
+                "TTS_API_ERROR", 
+                f"OpenAI TTS API error: {str(e)}"
+            )
+        except Exception as e:
+            raise ImageError(
+                "TTS_GENERATION_ERROR",
+                f"Failed to generate narration: {str(e)}"
+            )

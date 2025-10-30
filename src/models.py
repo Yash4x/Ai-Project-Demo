@@ -406,6 +406,7 @@ class ImageError(Exception):
 # ============================================================================
 
 @dataclass
+@dataclass
 class StoryOptions:
     """
     Configuration options for story-based image generation.
@@ -433,11 +434,17 @@ class StoryOptions:
     quality: str = "standard"
     style: str = "vivid"
     
+    # Audio narration options
+    enable_narration: bool = False
+    voice: str = "alloy"  # OpenAI TTS voices: alloy, echo, fable, onyx, nova, shimmer
+    narration_speed: float = 1.0  # Speed of narration (0.25 to 4.0)
+    
     # Auto-save options
     auto_save: bool = True
     save_path: Optional[str] = None
 
 
+@dataclass
 @dataclass
 class StoryScene:
     """
@@ -452,11 +459,18 @@ class StoryScene:
     narrative: str  # Brief description of what happens
     image_prompt: str  # Detailed prompt for image generation
     image_result: Optional[ImageResult] = None
+    audio_file_path: Optional[str] = None  # Path to generated audio narration
+    audio_url: Optional[str] = None  # URL for audio if using external storage
     
     @property
     def is_generated(self) -> bool:
         """Check if this scene has been generated."""
         return self.image_result is not None
+    
+    @property
+    def has_audio(self) -> bool:
+        """Check if this scene has audio narration."""
+        return self.audio_file_path is not None or self.audio_url is not None
 
 
 @dataclass  
