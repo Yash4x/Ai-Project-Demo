@@ -111,6 +111,86 @@
         </div>
     </div>
 </div>
+
+<!-- Slideshow Modal -->
+<div id="slideshowModal" class="fixed inset-0 bg-black bg-opacity-90 flex items-center justify-center z-50 hidden">
+    <div class="max-w-6xl max-h-full w-full h-full flex flex-col">
+        <!-- Slideshow Header -->
+        <div class="flex items-center justify-between p-6 text-white">
+            <div class="flex items-center gap-4">
+                <h2 id="slideshowTitle" class="text-2xl font-bold"></h2>
+                <div id="slideshowInfo" class="text-sm opacity-75"></div>
+            </div>
+            <div class="flex items-center gap-4">
+                <div id="slideshowProgress" class="text-sm">Scene 1 / 5</div>
+                <button onclick="toggleSlideshowPlayPause()" id="playPauseBtn" class="bg-white bg-opacity-20 hover:bg-opacity-30 text-white p-2 rounded-lg transition-colors">
+                    <i class="fas fa-pause" id="playPauseIcon"></i>
+                </button>
+                <button onclick="closeSlideshowModal()" class="bg-white bg-opacity-20 hover:bg-opacity-30 text-white p-2 rounded-lg transition-colors">
+                    <i class="fas fa-times"></i>
+                </button>
+            </div>
+        </div>
+        
+        <!-- Main Slideshow Area -->
+        <div class="flex-1 flex items-center justify-center p-6">
+            <div class="relative w-full h-full max-w-4xl max-h-[70vh]">
+                <img id="slideshowImage" class="w-full h-full object-contain rounded-lg shadow-2xl transition-opacity duration-500" alt="">
+                
+                <!-- Navigation Arrows -->
+                <button onclick="previousSlide()" class="absolute left-4 top-1/2 transform -translate-y-1/2 bg-black bg-opacity-50 hover:bg-opacity-70 text-white p-3 rounded-full transition-colors">
+                    <i class="fas fa-chevron-left"></i>
+                </button>
+                <button onclick="nextSlide()" class="absolute right-4 top-1/2 transform -translate-y-1/2 bg-black bg-opacity-50 hover:bg-opacity-70 text-white p-3 rounded-full transition-colors">
+                    <i class="fas fa-chevron-right"></i>
+                </button>
+                
+                <!-- Scene Info Overlay -->
+                <div class="absolute bottom-4 left-4 right-4 bg-black bg-opacity-50 text-white p-4 rounded-lg">
+                    <div class="flex items-center justify-between">
+                        <div>
+                            <div id="sceneTitle" class="font-semibold text-lg mb-1">Scene 1</div>
+                            <div id="sceneDescription" class="text-sm opacity-90"></div>
+                        </div>
+                        <div id="audioControls" class="hidden">
+                            <audio id="sceneAudio" controls class="h-8">
+                                <source type="audio/mpeg">
+                            </audio>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Slideshow Controls -->
+        <div class="p-6 text-white">
+            <div class="flex items-center justify-center gap-4 mb-4">
+                <button onclick="setSlideInterval('slow')" class="bg-white bg-opacity-20 hover:bg-opacity-30 px-4 py-2 rounded-lg transition-colors" id="slowBtn">
+                    Slow (5s)
+                </button>
+                <button onclick="setSlideInterval('normal')" class="bg-white bg-opacity-20 hover:bg-opacity-30 px-4 py-2 rounded-lg transition-colors" id="normalBtn">
+                    Normal (3s)
+                </button>
+                <button onclick="setSlideInterval('fast')" class="bg-white bg-opacity-20 hover:bg-opacity-30 px-4 py-2 rounded-lg transition-colors" id="fastBtn">
+                    Fast (1s)
+                </button>
+                <button onclick="setSlideInterval('audio')" class="bg-purple-500 bg-opacity-80 hover:bg-opacity-100 px-4 py-2 rounded-lg transition-colors hidden" id="audioSyncBtn">
+                    Audio Sync
+                </button>
+            </div>
+            
+            <!-- Progress Bar -->
+            <div class="w-full bg-white bg-opacity-20 rounded-full h-2 mb-2">
+                <div id="slideshowProgressBar" class="bg-white h-2 rounded-full transition-all duration-300" style="width: 0%"></div>
+            </div>
+            
+            <!-- Scene Thumbnails -->
+            <div id="sceneThumbnails" class="flex justify-center gap-2 overflow-x-auto">
+                <!-- Thumbnails will be populated here -->
+            </div>
+        </div>
+    </div>
+</div>
 {% endblock %}
 
 {% block extra_scripts %}
@@ -417,14 +497,18 @@ async function showStoryModal(storyPath) {
                             ${story.scene_count} scenes • Created ${formatDate(story.created_at)}
                             ${story.has_narration ? ` • <i class="fas fa-volume-up text-green-500 mr-1"></i>${story.audio_count} narrated scenes` : ''}
                         </p>
-                        ${story.has_narration ? `
-                            <div class="mt-2">
+                        <div class="mt-2 flex gap-2">
+                            <button onclick="startSlideshow('${story.name}')" 
+                                    class="bg-purple-500 hover:bg-purple-600 text-white text-sm py-2 px-4 rounded transition-colors">
+                                <i class="fas fa-play mr-2"></i>Start Slideshow
+                            </button>
+                            ${story.has_narration ? `
                                 <button onclick="playStoryNarrationFromGallery('${story.name}')" 
                                         class="bg-green-500 hover:bg-green-600 text-white text-sm py-2 px-4 rounded transition-colors">
-                                    <i class="fas fa-play mr-2"></i>Play Full Story Narration
+                                    <i class="fas fa-volume-up mr-2"></i>Play Narration
                                 </button>
-                            </div>
-                        ` : ''}
+                            ` : ''}
+                        </div>
                     </div>
                     <div class="grid md:grid-cols-2 lg:grid-cols-3 gap-4">
                         ${story.scenes.map((scene, index) => `
@@ -592,10 +676,308 @@ async function playStoryNarrationFromGallery(storyName) {
     }
 }
 
+// Slideshow functionality
+let currentSlideshow = null;
+let slideshowTimer = null;
+let currentSlideIndex = 0;
+let slideshowInterval = 3000; // Default 3 seconds
+let isPlaying = true;
+
+async function startSlideshow(storyName) {
+    try {
+        // Get story data
+        const response = await fetch('/api/gallery');
+        const data = await response.json();
+        
+        const story = data.items.find(item => item.name === storyName && item.type === 'story');
+        if (!story || !story.scenes || story.scenes.length === 0) {
+            alert('Story not found or has no scenes!');
+            return;
+        }
+        
+        // Debug logging
+        console.log('Slideshow Debug - Story loaded:', {
+            storyName: story.name,
+            sceneCount: story.scenes.length,
+            scenes: story.scenes.map(scene => ({
+                sceneNumber: scene.scene_number,
+                filename: scene.filename,
+                hasAudio: scene.has_audio,
+                audioUrl: scene.audio_url
+            }))
+        });
+        
+        // Close story modal
+        closeStoryModal();
+        
+        // Initialize slideshow
+        currentSlideshow = story;
+        currentSlideIndex = 0;
+        isPlaying = true;
+        
+        // Set default interval based on narration
+        if (story.has_narration) {
+            slideshowInterval = 'audio'; // Will be handled per scene
+            document.getElementById('audioSyncBtn').classList.remove('hidden');
+        } else {
+            slideshowInterval = 3000;
+            document.getElementById('audioSyncBtn').classList.add('hidden');
+        }
+        
+        // Setup slideshow modal
+        document.getElementById('slideshowTitle').textContent = story.name;
+        document.getElementById('slideshowInfo').textContent = `${story.scene_count} scenes`;
+        
+        // Create thumbnails
+        createSlideshowThumbnails(story);
+        
+        // Show modal and start slideshow
+        document.getElementById('slideshowModal').classList.remove('hidden');
+        updateSlideDisplay();
+        
+        if (isPlaying) {
+            startSlideshowTimer();
+        }
+        
+    } catch (error) {
+        console.error('Error starting slideshow:', error);
+        alert('Error loading slideshow.');
+    }
+}
+
+function createSlideshowThumbnails(story) {
+    const container = document.getElementById('sceneThumbnails');
+    container.innerHTML = '';
+    
+    story.scenes.forEach((scene, index) => {
+        const thumb = document.createElement('div');
+        thumb.className = `w-16 h-12 bg-gray-600 rounded cursor-pointer transition-all duration-200 ${index === 0 ? 'ring-2 ring-white' : ''}`;
+        thumb.onclick = () => goToSlide(index);
+        
+        const img = document.createElement('img');
+        img.src = `/generated_images/${story.name}/${scene.filename}`;
+        img.className = 'w-full h-full object-cover rounded';
+        img.onerror = () => {
+            thumb.innerHTML = `<div class="w-full h-full flex items-center justify-center text-white text-xs">${index + 1}</div>`;
+        };
+        
+        thumb.appendChild(img);
+        container.appendChild(thumb);
+    });
+}
+
+function updateSlideDisplay() {
+    if (!currentSlideshow || !currentSlideshow.scenes) return;
+    
+    const scene = currentSlideshow.scenes[currentSlideIndex];
+    const slideImage = document.getElementById('slideshowImage');
+    
+    // Fade out
+    slideImage.style.opacity = '0';
+    
+    setTimeout(() => {
+        // Update content
+        slideImage.src = `/generated_images/${currentSlideshow.name}/${scene.filename}`;
+        document.getElementById('slideshowProgress').textContent = `Scene ${currentSlideIndex + 1} / ${currentSlideshow.scenes.length}`;
+        document.getElementById('sceneTitle').textContent = `Scene ${currentSlideIndex + 1}`;
+        document.getElementById('sceneDescription').textContent = scene.narrative || `Scene ${currentSlideIndex + 1} of the story`;
+        
+        // Update progress bar
+        const progress = ((currentSlideIndex + 1) / currentSlideshow.scenes.length) * 100;
+        document.getElementById('slideshowProgressBar').style.width = `${progress}%`;
+        
+        // Update thumbnails
+        document.querySelectorAll('#sceneThumbnails > div').forEach((thumb, index) => {
+            thumb.className = thumb.className.replace(/ring-2 ring-white/, '');
+            if (index === currentSlideIndex) {
+                thumb.className += ' ring-2 ring-white';
+            }
+        });
+        
+        // Handle audio if available
+        const audioControls = document.getElementById('audioControls');
+        const sceneAudio = document.getElementById('sceneAudio');
+        
+        // Debug logging
+        console.log(`Slideshow Debug - Scene ${currentSlideIndex + 1}:`, {
+            sceneNumber: scene.scene_number,
+            filename: scene.filename,
+            hasAudio: scene.has_audio,
+            audioUrl: scene.audio_url,
+            audioFilename: scene.audio_filename
+        });
+        
+        if (scene.has_audio && scene.audio_url) {
+            sceneAudio.src = scene.audio_url;
+            audioControls.classList.remove('hidden');
+            
+            // Auto-play audio in audio sync mode
+            if (slideshowInterval === 'audio' && isPlaying) {
+                sceneAudio.play().catch(e => console.log('Audio autoplay prevented:', e));
+            }
+        } else {
+            audioControls.classList.add('hidden');
+            sceneAudio.src = '';
+        }
+        
+        // Fade in
+        slideImage.style.opacity = '1';
+    }, 250);
+}
+
+function startSlideshowTimer() {
+    if (slideshowTimer) {
+        clearTimeout(slideshowTimer);
+    }
+    
+    if (!isPlaying || !currentSlideshow) return;
+    
+    let delay = 3000; // Default
+    
+    if (slideshowInterval === 'audio') {
+        // Use audio duration if available
+        const scene = currentSlideshow.scenes[currentSlideIndex];
+        if (scene.has_audio && scene.audio_url) {
+            // For audio sync, wait for audio to end
+            const sceneAudio = document.getElementById('sceneAudio');
+            sceneAudio.onended = () => {
+                if (isPlaying) {
+                    nextSlide();
+                }
+            };
+            return; // Don't set timer, rely on audio ending
+        } else {
+            delay = 5000; // Longer delay for scenes without audio
+        }
+    } else {
+        delay = parseInt(slideshowInterval);
+    }
+    
+    slideshowTimer = setTimeout(() => {
+        if (isPlaying) {
+            nextSlide();
+        }
+    }, delay);
+}
+
+function nextSlide() {
+    if (!currentSlideshow) return;
+    
+    currentSlideIndex = (currentSlideIndex + 1) % currentSlideshow.scenes.length;
+    updateSlideDisplay();
+    
+    if (isPlaying) {
+        startSlideshowTimer();
+    }
+}
+
+function previousSlide() {
+    if (!currentSlideshow) return;
+    
+    currentSlideIndex = currentSlideIndex === 0 ? currentSlideshow.scenes.length - 1 : currentSlideIndex - 1;
+    updateSlideDisplay();
+    
+    // Restart timer if playing
+    if (isPlaying) {
+        startSlideshowTimer();
+    }
+}
+
+function goToSlide(index) {
+    if (!currentSlideshow || index < 0 || index >= currentSlideshow.scenes.length) return;
+    
+    currentSlideIndex = index;
+    updateSlideDisplay();
+    
+    // Restart timer if playing
+    if (isPlaying) {
+        startSlideshowTimer();
+    }
+}
+
+function toggleSlideshowPlayPause() {
+    isPlaying = !isPlaying;
+    const icon = document.getElementById('playPauseIcon');
+    
+    if (isPlaying) {
+        icon.className = 'fas fa-pause';
+        startSlideshowTimer();
+    } else {
+        icon.className = 'fas fa-play';
+        if (slideshowTimer) {
+            clearTimeout(slideshowTimer);
+        }
+        // Pause audio if playing
+        const sceneAudio = document.getElementById('sceneAudio');
+        if (!sceneAudio.paused) {
+            sceneAudio.pause();
+        }
+    }
+}
+
+function setSlideInterval(speed) {
+    // Remove active state from all buttons
+    ['slowBtn', 'normalBtn', 'fastBtn', 'audioSyncBtn'].forEach(id => {
+        const btn = document.getElementById(id);
+        btn.className = btn.className.replace(/bg-blue-500|bg-purple-500/, 'bg-white').replace(/bg-opacity-80|bg-opacity-100/, 'bg-opacity-20');
+    });
+    
+    // Set new interval and highlight active button
+    switch(speed) {
+        case 'slow':
+            slideshowInterval = 5000;
+            document.getElementById('slowBtn').className = document.getElementById('slowBtn').className.replace('bg-white bg-opacity-20', 'bg-blue-500 bg-opacity-80');
+            break;
+        case 'normal':
+            slideshowInterval = 3000;
+            document.getElementById('normalBtn').className = document.getElementById('normalBtn').className.replace('bg-white bg-opacity-20', 'bg-blue-500 bg-opacity-80');
+            break;
+        case 'fast':
+            slideshowInterval = 1000;
+            document.getElementById('fastBtn').className = document.getElementById('fastBtn').className.replace('bg-white bg-opacity-20', 'bg-blue-500 bg-opacity-80');
+            break;
+        case 'audio':
+            slideshowInterval = 'audio';
+            document.getElementById('audioSyncBtn').className = document.getElementById('audioSyncBtn').className.replace('bg-purple-500 bg-opacity-80', 'bg-purple-500 bg-opacity-100');
+            break;
+    }
+    
+    // Restart timer with new interval
+    if (isPlaying) {
+        startSlideshowTimer();
+    }
+}
+
+function closeSlideshowModal() {
+    document.getElementById('slideshowModal').classList.add('hidden');
+    
+    // Clean up
+    if (slideshowTimer) {
+        clearTimeout(slideshowTimer);
+    }
+    
+    // Stop audio
+    const sceneAudio = document.getElementById('sceneAudio');
+    if (!sceneAudio.paused) {
+        sceneAudio.pause();
+    }
+    
+    currentSlideshow = null;
+    currentSlideIndex = 0;
+    isPlaying = true;
+}
+
 // Close modal when clicking outside
 document.getElementById('imageModal').addEventListener('click', function(e) {
     if (e.target === this) {
         closeModal();
+    }
+});
+
+// Close slideshow modal when clicking outside
+document.getElementById('slideshowModal').addEventListener('click', function(e) {
+    if (e.target === this) {
+        closeSlideshowModal();
     }
 });
 
@@ -604,6 +986,25 @@ document.addEventListener('keydown', function(e) {
     if (e.key === 'Escape') {
         closeModal();
         closeStoryModal();
+        closeSlideshowModal();
+    }
+    
+    // Slideshow controls
+    if (currentSlideshow) {
+        switch(e.key) {
+            case 'ArrowLeft':
+                e.preventDefault();
+                previousSlide();
+                break;
+            case 'ArrowRight':
+                e.preventDefault();
+                nextSlide();
+                break;
+            case ' ':
+                e.preventDefault();
+                toggleSlideshowPlayPause();
+                break;
+        }
     }
 });
 </script>

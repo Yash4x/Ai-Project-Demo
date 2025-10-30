@@ -301,31 +301,41 @@ def _get_story_info(story_path: str) -> Optional[Dict]:
                     except (ValueError, IndexError):
                         continue
         
-        # Second pass: get all image files and match with audio
+        # Second pass: get all image files and sort them by creation time to maintain order
+        image_files = []
         for file in os.listdir(story_path):
             if file.endswith(('.png', '.jpg', '.jpeg', '.webp')):
                 file_path = os.path.join(story_path, file)
-                
-                # Try to determine scene number from image filename
-                scene_number = len(scenes) + 1  # Default scene numbering
-                
-                scene_data = {
+                image_files.append({
                     'filename': file,
                     'path': file_path,
-                    'size': os.path.getsize(file_path),
-                    'modified': datetime.fromtimestamp(os.path.getmtime(file_path)).isoformat(),
-                    'scene_number': scene_number,
-                    'has_audio': scene_number in audio_files,
-                    'audio_url': audio_files.get(scene_number, {}).get('url'),
-                    'audio_filename': audio_files.get(scene_number, {}).get('filename')
-                }
-                scenes.append(scene_data)
+                    'created': os.path.getctime(file_path)
+                })
+        
+        # Sort images by creation time to maintain original generation order
+        image_files.sort(key=lambda x: x['created'])
+        
+        # Now assign scene numbers based on the sorted order
+        for index, img_info in enumerate(image_files):
+            scene_number = index + 1  # Scene numbers start from 1
+            file_path = img_info['path']
+            
+            scene_data = {
+                'filename': img_info['filename'],
+                'path': file_path,
+                'size': os.path.getsize(file_path),
+                'modified': datetime.fromtimestamp(os.path.getmtime(file_path)).isoformat(),
+                'scene_number': scene_number,
+                'has_audio': scene_number in audio_files,
+                'audio_url': audio_files.get(scene_number, {}).get('url'),
+                'audio_filename': audio_files.get(scene_number, {}).get('filename')
+            }
+            scenes.append(scene_data)
         
         if not scenes:
             return None
         
-        # Sort scenes by filename (should be in order)
-        scenes.sort(key=lambda x: x['filename'])
+        # No need to sort again since we already processed in creation order
         
         # Count total audio files
         total_audio_files = len(audio_files)
